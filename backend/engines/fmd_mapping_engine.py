@@ -29,9 +29,17 @@ import duckdb
 import openpyxl
 from openpyxl.styles import Font, PatternFill
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_CURR_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = _CURR_DIR
+for _candidate in [_CURR_DIR, os.path.dirname(_CURR_DIR), os.path.dirname(os.path.dirname(_CURR_DIR))]:
+    if os.path.exists(os.path.join(_candidate, "demo_data")):
+        BASE_DIR = _candidate
+        break
+
 DEMO_FMD_DIR = os.path.join(BASE_DIR, "demo_data", "fmd")
-STORE_PATH = os.path.join(BASE_DIR, ".fmd_store.json")
+STORE_PATH = os.path.join(BASE_DIR, "data", ".fmd_store.json")
+if not os.path.exists(STORE_PATH) and os.path.exists(os.path.join(BASE_DIR, ".fmd_store.json")):
+    STORE_PATH = os.path.join(BASE_DIR, ".fmd_store.json")
 
 DESIGN_SPEC_REF = "TIME_L3_MDA_MT-C_Material_Master_R3.2[21]"
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15 MB compressed cap

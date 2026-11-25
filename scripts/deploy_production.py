@@ -90,16 +90,32 @@ def deploy():
                 sftp.mkdir(d)
 
     # 2. Upload Backend Modular Files
-    print(f"\n[2/4] Deploying {len(BACKEND_FILES)} backend modules to {REMOTE_BACKEND_DIR}...")
+    print(f"\n[2/4] Deploying backend package to {REMOTE_BACKEND_DIR}...")
     sftp_mkdir_p(REMOTE_BACKEND_DIR)
-    for bf in BACKEND_FILES:
-        local_path = os.path.join(LOCAL_BACKEND_DIR, bf)
-        if os.path.exists(local_path):
-            remote_path = f"{REMOTE_BACKEND_DIR}/{bf}"
-            sftp.put(local_path, remote_path)
-            print(f"  -> Uploaded: {bf}")
+    local_backend = os.path.join(LOCAL_BACKEND_DIR, "backend")
+    
+    # Upload root service.py shim
+    root_service = os.path.join(LOCAL_BACKEND_DIR, "service.py")
+    if os.path.exists(root_service):
+        sftp.put(root_service, f"{REMOTE_BACKEND_DIR}/service.py")
+
+    # Upload all backend domain packages and modules
+    for root, dirs, files in os.walk(local_backend):
+        if "__pycache__" in root:
+            continue
+        rel_path = os.path.relpath(root, local_backend)
+        if rel_path == ".":
+            remote_path = REMOTE_BACKEND_DIR
         else:
-            print(f"  [WARN] Local file missing: {bf}")
+            remote_path = os.path.join(REMOTE_BACKEND_DIR, rel_path).replace('\\', '/')
+        sftp_mkdir_p(remote_path)
+        for f in files:
+            if f.endswith('.pyc'):
+                continue
+            l_file = os.path.join(root, f)
+            r_file = os.path.join(remote_path, f).replace('\\', '/')
+            sftp.put(l_file, r_file)
+            print(f"  -> Uploaded: {os.path.join(rel_path, f)}")
 
     # 3. Upload Frontend Dist
     print(f"\n[3/4] Deploying frontend assets to {REMOTE_DIST}...")

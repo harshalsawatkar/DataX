@@ -24,7 +24,7 @@ services:
   datax-backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: deploy/Dockerfile.backend
     container_name: datax-backend
     restart: always
     depends_on:
@@ -58,7 +58,7 @@ services:
   datax-frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: deploy/Dockerfile.frontend
     container_name: datax-frontend
     restart: always
     depends_on:
