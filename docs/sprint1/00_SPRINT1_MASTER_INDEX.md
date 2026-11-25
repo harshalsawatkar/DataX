@@ -52,3 +52,11 @@ flowchart LR
    - Verified via live API telemetry (`/datax-api/storage/info`): On-prem PostgreSQL is active on `127.0.0.1:5432` (`database=datax`, `ON_PREM_SELF_HOSTED`, 12 tables initialized).
    - Note: Direct SSH from this workstation requires an SSH key in `~/.ssh` (or the post-incident rotated VM password), and GitHub Actions Secrets (`AZURE_VM_PASSWORD` / `AZURE_VM_SSH_KEY`) should match the rotated VM credentials for automated deploys.
 5. **Module 4 Horizontal Renaming Approved:** Rename *"FMD Mapping & BODS Staging"* in navigation and product surfaces to **"Schema & Migration Studio"**, featuring *SAP S/4HANA FMD → Migration Cockpit & BODS* as Certified Domain Accelerator #1.
+
+
+---
+
+## 4. Execution & Delegation Artifacts
+
+- [**07_DEVELOPER_TASK_HANDOFF_PACKS.md**](file:///h:/AAVIL%20Inc/DataX/DataX/docs/sprint1/07_DEVELOPER_TASK_HANDOFF_PACKS.md) — Self-contained, zero-merge-conflict engineering tickets (`WP-D1` through `WP-D4`) ready to hand directly to another developer (includes exact file paths, algorithms, test gates, and a copy-paste AI-IDE prompt).
+- [**08_SPRINT1_MASTER_CHECKBOOK.md**](file:///h:/AAVIL%20Inc/DataX/DataX/docs/sprint1/08_SPRINT1_MASTER_CHECKBOOK.md) — Strictly ordered 60-item `[ ]` checkbox tracker (`S1-01` → `S1-60`) across Phases 0–6 with owner tags (`[Core]` vs `[Dev-2]`) and runnable verification gates.
