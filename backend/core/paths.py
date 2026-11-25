@@ -18,6 +18,7 @@ BACKEND_DIR = os.path.dirname(_CORE_DIR)
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 
 _PROD_SERVICE_DIR = "/home/azureuserSDH/Production/datax-service"
+_PROD_REPO_DIR = "/home/azureuserSDH/Production/DataX"
 
 
 def _resolve_data_dir() -> str:
@@ -32,7 +33,7 @@ def _resolve_data_dir() -> str:
 
 
 def _resolve_demo_data_dir() -> str:
-    for candidate in (PROJECT_ROOT, BACKEND_DIR, DATA_DIR):
+    for candidate in (PROJECT_ROOT, BACKEND_DIR, DATA_DIR, _PROD_REPO_DIR):
         path = os.path.join(candidate, "demo_data")
         if os.path.isdir(path):
             return path

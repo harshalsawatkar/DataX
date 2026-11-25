@@ -35,6 +35,7 @@ for _dir in [
     os.path.join(_BACKEND_DIR, "connectors"),
     os.path.join(_BACKEND_DIR, "governance"),
     os.path.join(_BACKEND_DIR, "models"),
+    os.path.join(_BACKEND_DIR, "tests"),
     os.path.join(_PROJECT_ROOT, "tests"),
 ]:
     if os.path.isdir(_dir) and _dir not in sys.path:

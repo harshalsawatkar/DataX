@@ -20,6 +20,7 @@ _SUBDIRS = [
     "connectors",
     "governance",
     "models",
+    "tests",
     os.path.join(_PROJECT_ROOT, "tests"),
 ]
 

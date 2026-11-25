@@ -28,7 +28,7 @@ jobs:
 
       - name: Syntax & Compilation Gate
         run: |
-          python -m py_compile *.py backend/*.py backend/**/*.py tests/*.py
+          python -m compileall -q service.py backend tests
 
       - name: Run Unit Tests
         run: |
@@ -79,5 +79,7 @@ jobs:
             git fetch origin feature/dynamic-ui
             git reset --hard origin/feature/dynamic-ui
             cp -r backend/* /home/azureuserSDH/Production/datax-service/
+            cp -r tests /home/azureuserSDH/Production/datax-service/
+            cp -r demo_data /home/azureuserSDH/Production/datax-service/
             npm run build
             pm2 restart 6
