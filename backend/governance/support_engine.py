@@ -11,8 +11,9 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
-INCIDENTS_STORE_FILE = os.path.join(os.path.dirname(__file__), ".incidents_store.json")
-FEEDBACK_STORE_FILE = os.path.join(os.path.dirname(__file__), ".feedback_store.json")
+from paths import data_path
+INCIDENTS_STORE_FILE = data_path(".incidents_store.json")
+FEEDBACK_STORE_FILE = data_path(".feedback_store.json")
 
 class IncidentReport(BaseModel):
     id: str

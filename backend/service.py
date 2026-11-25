@@ -40,6 +40,9 @@ for _dir in [
     if os.path.isdir(_dir) and _dir not in sys.path:
         sys.path.insert(0, _dir)
 
+# Resolve the persistent data directory (exports DATAX_VAULT_DIR) before any store-backed module loads
+import paths  # noqa: F401
+
 import auth_engine
 
 # Modular Subsystems

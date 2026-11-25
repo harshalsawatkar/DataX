@@ -15,8 +15,9 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 
-BACKUP_DIR = os.path.join(os.path.dirname(__file__), ".backups")
-ARCHIVE_EXPORT_DIR = os.path.join(os.path.dirname(__file__), ".exports")
+from paths import DATA_DIR
+BACKUP_DIR = os.path.join(DATA_DIR, ".backups")
+ARCHIVE_EXPORT_DIR = os.path.join(DATA_DIR, ".exports")
 os.makedirs(BACKUP_DIR, exist_ok=True)
 os.makedirs(ARCHIVE_EXPORT_DIR, exist_ok=True)
 
@@ -69,12 +70,12 @@ class BusinessContinuityManager:
         tar_filepath = os.path.join(BACKUP_DIR, tar_filename)
 
         files_to_backup = [
-            ("threads.json", os.path.join(os.path.dirname(__file__), "threads.json")),
-            ("runs.json", os.path.join(os.path.dirname(__file__), "runs.json")),
-            ("audit_logs.json", os.path.join(os.path.dirname(__file__), "audit_logs.json")),
-            ("dlq_storage.json", os.path.join(os.path.dirname(__file__), ".dlq_storage.json")),
-            ("vault.db", os.path.join(os.path.dirname(__file__), "vault.db")),
-            ("idempotency_store.json", os.path.join(os.path.dirname(__file__), ".idempotency_store.json"))
+            ("threads.json", os.path.join(DATA_DIR, "threads.json")),
+            ("runs.json", os.path.join(DATA_DIR, "runs.json")),
+            ("audit_logs.json", os.path.join(DATA_DIR, "audit_logs.json")),
+            ("dlq_storage.json", os.path.join(DATA_DIR, ".dlq_storage.json")),
+            ("vault.db", os.path.join(DATA_DIR, "vault.db")),
+            ("idempotency_store.json", os.path.join(DATA_DIR, ".idempotency_store.json"))
         ]
 
         included = []

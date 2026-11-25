@@ -27,3 +27,5 @@ for _sub in _SUBDIRS:
     _p = os.path.join(_BACKEND_DIR, _sub)
     if os.path.isdir(_p) and _p not in sys.path:
         sys.path.insert(0, _p)
+
+import paths  # noqa: E402,F401  (exports DATAX_VAULT_DIR)

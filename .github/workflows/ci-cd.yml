@@ -79,6 +79,5 @@ jobs:
             git fetch origin feature/dynamic-ui
             git reset --hard origin/feature/dynamic-ui
             cp -r backend/* /home/azureuserSDH/Production/datax-service/
-            cp *.py /home/azureuserSDH/Production/datax-service/
             npm run build
             pm2 restart 6

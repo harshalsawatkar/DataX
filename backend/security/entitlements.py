@@ -39,7 +39,8 @@ TIER_QUOTAS = {
     }
 }
 
-METER_STORE_FILE = os.path.join(os.path.dirname(__file__), ".meter_store.json")
+from paths import data_path
+METER_STORE_FILE = data_path(".meter_store.json")
 
 class EntitlementsEngine:
     def __init__(self):

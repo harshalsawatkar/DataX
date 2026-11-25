@@ -93,13 +93,8 @@ def deploy():
     print(f"\n[2/4] Deploying backend package to {REMOTE_BACKEND_DIR}...")
     sftp_mkdir_p(REMOTE_BACKEND_DIR)
     local_backend = os.path.join(LOCAL_BACKEND_DIR, "backend")
-    
-    # Upload root service.py shim
-    root_service = os.path.join(LOCAL_BACKEND_DIR, "service.py")
-    if os.path.exists(root_service):
-        sftp.put(root_service, f"{REMOTE_BACKEND_DIR}/service.py")
 
-    # Upload all backend domain packages and modules
+    # Upload all backend domain packages and modules (backend/service.py becomes the VM entrypoint)
     for root, dirs, files in os.walk(local_backend):
         if "__pycache__" in root:
             continue
