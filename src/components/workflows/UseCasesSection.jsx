@@ -36,7 +36,7 @@ const MlGateIcon = () => (
   </svg>
 );
 
-// Use Case 4: Multi-Tab FMD Mapping Spreadsheet Icon
+// Use Case 4: Schema & Migration Studio Spreadsheet Icon
 const FmdMappingIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
     <rect x="3" y="4" width="18" height="16" rx="3" fill="#EEF2FF" stroke="#0A0F1F" strokeWidth="1.5" />
@@ -177,7 +177,7 @@ export default function UseCasesSection({
           </div>
         </div>
 
-        {/* Card 4: Functional Mapping & BODS Staging (FMD) */}
+        {/* Card 4: Schema & Migration Studio */}
         <div
           onClick={onOpenMappingStudio}
           className="bg-white dark:bg-[#18181C] rounded-[20px] border border-[#E3E6EE] dark:border-white/[0.08] p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-[#2D55F5]/30 transition-all cursor-pointer flex flex-col justify-between group"
@@ -188,7 +188,7 @@ export default function UseCasesSection({
             </div>
 
             <h3 className="font-bold text-sm sm:text-base text-[#0A0F1F] dark:text-white group-hover:text-[#2D55F5] transition-colors tracking-tight">
-              FMD mapping & BODS staging
+              Schema &amp; Migration Studio
             </h3>
 
             <p className="text-xs text-[#5F6678] dark:text-slate-400 leading-relaxed mt-2">

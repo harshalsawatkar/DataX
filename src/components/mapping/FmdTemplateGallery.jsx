@@ -44,9 +44,9 @@ export const SAAS_PIPELINE_TEMPLATES = [
   },
   {
     id: 'upload-fmd-sap-bods',
-    name: 'Multi-Tab Excel FMDs & XREF → SAP BODS Staging',
+    name: 'Schema & Migration Studio: Multi-Tab Excel FMDs & XREF → SAP BODS',
     category: 'SAP & ERP',
-    badge: 'Enterprise FMD',
+    badge: 'Certified Accelerator · SAP S/4HANA FMD → Migration Cockpit & BODS',
     icon: Layers,
     sourceSummary: 'Upload Multi-Tab FMDs + XREF + Source Extracts',
     targetSummary: 'SAP BODS Staging DB + Z_ERRORLOG',
@@ -474,7 +474,7 @@ export default function FmdTemplateGallery({
             </button>
             <div>
               <h1 className="text-lg sm:text-xl font-bold text-[#0A0F1F] dark:text-white tracking-tight">
-                Choose a Mapping &amp; Transformation Template
+                Schema &amp; Migration Studio
               </h1>
               <p className="text-xs text-[#5F6678] dark:text-slate-400 mt-0.5">
                 Pick any Source → Destination blueprint, build from a blank canvas with unlimited nodes, or let AI assemble the pipeline for you.

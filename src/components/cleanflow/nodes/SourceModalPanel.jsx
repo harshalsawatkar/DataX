@@ -79,7 +79,7 @@ export default function SourceModalPanel({
       } else {
         await fmdApi.uploadSource({ fileName: uploadedFileMeta.name, contentBase64: uploadedRawBase64 });
       }
-      setSyncNotice('Synced to FMD Mapping Studio');
+      setSyncNotice('Synced to Schema & Migration Studio');
       if (onNavigateToMappingStudio) onNavigateToMappingStudio();
     } catch (err) {
       setSyncNotice(`Sync failed: ${err.message}`);
@@ -321,7 +321,7 @@ export default function SourceModalPanel({
                     type="text"
                     value={srcUser}
                     onChange={(e) => setSrcUser(e.target.value)}
-                    placeholder="AKIAIOSFODNN7EXAMPLE"
+                    placeholder="Enter AWS access key ID"
                     className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
                   />
                 </div>
@@ -565,7 +565,7 @@ export default function SourceModalPanel({
                 rows={2}
                 value={connString}
                 onChange={(e) => setConnString(e.target.value)}
-                placeholder="mongodb+srv://user:pass@cluster0.mongodb.net/ or postgresql://user:pass@host/db"
+                placeholder="mongodb+srv://cluster0.mongodb.net/ or postgresql://user:pass@host/db"
                 className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
               />
             </div>

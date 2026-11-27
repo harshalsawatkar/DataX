@@ -68,7 +68,7 @@ export default function TargetModalPanel({
           type="text"
           value={tgtEndpoint}
           onChange={(e) => setTgtEndpoint(e.target.value)}
-          placeholder="postgresql://user:pass@host/neondb?sslmode=require"
+          placeholder="postgresql://host/neondb?sslmode=require"
           className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 font-mono"
         />
       </div>

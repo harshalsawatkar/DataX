@@ -4,23 +4,21 @@ import { Database, Key, CheckCircle2, RefreshCw, Layers, Info } from 'lucide-rea
 /**
  * Pinecone Vector Database — Settings Panel
  * Destination vector store for high-dimensional embeddings and metadata.
- * Credentials and endpoints are securely loaded from .env variables when available.
- * In production or when env vars are absent, all credential fields remain empty
- * and must be filled in manually by the user.
+ * Credentials and endpoints are entered by the user.
+ * Sensitive values must be sent to the backend vault and never embedded in Vite variables.
  */
 export default function PineconeModalPanel({
-  // Only auto-fill from .env — no hardcoded fallbacks for credential/identity fields.
-  // Empty string means the field shows its placeholder and stays blank until the user types.
-  indexName = import.meta.env.VITE_PINECONE_INDEX || import.meta.env.PINECONE_INDEX || '',
+  // Keep credential fields blank until the user or backend vault supplies a value.
+  indexName = '',
   onIndexNameChange,
-  host = import.meta.env.VITE_PINECONE_HOST || import.meta.env.PINECONE_HOST || '',
+  host = '',
   onHostChange,
-  apiKey = import.meta.env.VITE_PINECONE_API_KEY || import.meta.env.PINECONE_API_KEY || '',
+  apiKey = '',
   onApiKeyChange,
-  namespace = import.meta.env.VITE_PINECONE_NAMESPACE || import.meta.env.PINECONE_NAMESPACE || '',
+  namespace = '',
   onNamespaceChange,
   // dimension has a sensible technical default (not a credential)
-  dimension = import.meta.env.VITE_PINECONE_DIMENSION || import.meta.env.PINECONE_DIMENSION || '1024',
+  dimension = '1024',
   onDimensionChange,
   metric = 'cosine',
   onMetricChange,
@@ -164,7 +162,7 @@ export default function PineconeModalPanel({
           type="password"
           value={apiKey}
           onChange={(e) => onApiKeyChange?.(e.target.value)}
-          placeholder="Loaded securely from .env (pcsk_...)"
+          placeholder="Enter a Pinecone API key"
           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
         />
       </div>
