@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { API_BASE_URL, fmdApi } from '../services/apiClient';
 import { OPERATIONAL_CATALOG } from '../components/cleanflow/constants/nodeCatalog';
 import { DIRECTORY_SECTIONS } from '../components/common/navigate/PlatformDirectoryColumn';
+import { resolveScreenFromLocation } from '../context/NavigationContext';
+import { SAAS_PIPELINE_TEMPLATES } from '../components/mapping/FmdTemplateGallery';
 
-describe('FMD Mapping Studio API & Catalog Integration', () => {
+describe('Schema & Migration Studio API & Catalog Integration', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });
@@ -83,6 +85,26 @@ describe('FMD Mapping Studio API & Catalog Integration', () => {
     const studio = ops.items.find((i) => i.screen === 'mapping-studio');
     expect(studio).toBeDefined();
     expect(studio.label).toBe('Schema & Migration Studio');
+  });
+
+  it.each(['#mapping-studio', '#migration-studio'])('resolves %s to the Schema & Migration Studio page', (hash) => {
+    vi.stubGlobal('window', { location: { hash, pathname: '/' } });
+    expect(resolveScreenFromLocation()).toBe('mapping-studio');
+  });
+
+  it('renames the SAP accelerator badge without changing its template graph', () => {
+    const template = SAAS_PIPELINE_TEMPLATES.find((item) => item.id === 'upload-fmd-sap-bods');
+    expect(template.badge).toBe('Certified Accelerator · SAP S/4HANA FMD → Migration Cockpit & BODS');
+    expect(template.nodes.map((node) => node.id)).toEqual([
+      'n-fmd-upload',
+      'n-src-upload',
+      'n-consolidator',
+      'n-xref',
+      'n-hitl',
+      'n-bods',
+      'n-err',
+    ]);
+    expect(template.edges.map((edge) => edge.id)).toEqual(['e-f1', 'e-f2', 'e-f3', 'e-f4', 'e-f5', 'e-f6']);
   });
 
   it('resolves available field keys robustly without producing undefined in dropdown', () => {

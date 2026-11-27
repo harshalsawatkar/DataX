@@ -761,10 +761,25 @@ def api_import_bundle(bundle: Dict[str, Any], user: Dict[str, Any] = Depends(req
 # AI Governance & Model Safety Routes (Section 9)
 # -----------------------------------------------------------------------------
 @app.get("/ai-governance/status")
-def api_get_ai_governance_status(tenant_id: str = "default", user: Dict[str, Any] = Depends(get_current_user)):
+@app.get("/governance/llm-budget")
+@app.get("/api/governance/llm-budget")
+@app.get("/ai-governance/budget")
+@app.get("/api/ai-governance/budget")
+def api_get_ai_governance_status(tenant_id: str = "default"):
     """P0 & P1: Returns pinned model version, privacy sharing opt-in, spend, and caps."""
     from ai_governance import ai_governor
-    return {"status": "success", "governance": ai_governor.get_governance_report(tenant_id)}
+    report = ai_governor.get_governance_report(tenant_id)
+    return {
+        "status": "success",
+        "tenant_id": tenant_id,
+        "monthly_budget_usd": report.get("monthly_budget_usd", 50.0),
+        "current_spend_usd": report.get("current_spend_usd", 0.0),
+        "total_tokens_used": report.get("total_tokens_used", 0),
+        "budget_remaining_usd": max(0.0, round(report.get("monthly_budget_usd", 50.0) - report.get("current_spend_usd", 0.0), 4)),
+        "allow_external_llm_sharing": report.get("allow_external_llm_sharing", False),
+        "confidence_threshold": report.get("confidence_threshold", 0.85),
+        "governance": report
+    }
 
 
 @app.post("/ai-governance/policy")

@@ -240,6 +240,7 @@ function ScreenRenderer({ onBackToWebsite }) {
       );
 
     case 'mapping-studio':
+    case 'migration-studio':
     case 'fmd':
     case 'fmd-mapping':
       return (

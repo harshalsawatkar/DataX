@@ -1,21 +1,37 @@
 """
 DataX Database Connectors & Live Sampling Engine
-Supports MongoDB Atlas, PostgreSQL, SAP HANA Cloud with resilience and retries.
+
+Supports live database connections without returning simulated success. Optional
+drivers are detected explicitly and report their installation status.
 """
 
 import time
-import socket
-from datetime import datetime, date
+from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Any, List
+from urllib.parse import quote, unquote, urlsplit
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from pymongo import MongoClient
 
+try:
+    import pymysql
+except ImportError:
+    pymysql = None
+
+try:
+    import pymssql
+except ImportError:
+    pymssql = None
+
+try:
+    import hdbcli.dbapi as hdbcli
+except ImportError:
+    hdbcli = None
+
 from models import StoreCredentialRequest, SampleDataRequest
 from vault import get_resolved_uri
-from sap_generator import get_sap_table_sample
 from resilience import retry_with_backoff, source_db_breaker
 from db_pool import db_pool
 
@@ -24,10 +40,27 @@ def _build_uri_from_request(req: Any, engine: str) -> str:
     uri = (getattr(req, "connectionUri", None) or "").strip()
     if not uri and getattr(req, "host", None):
         raw_host = req.host.strip()
-        if raw_host.startswith(("mongodb://", "mongodb+srv://", "postgresql://", "postgres://", "jdbc:")):
+        if raw_host.startswith((
+            "mongodb://", "mongodb+srv://", "postgresql://", "postgres://",
+            "mysql://", "mariadb://", "mssql://", "mssql+pymssql://",
+            "sqlserver://", "jdbc:",
+        )):
             uri = raw_host
         elif engine in ["postgres", "postgresql"]:
-            uri = f"postgresql://{req.user or ''}:{req.password or ''}@{raw_host}:{req.port or 5432}/{req.database or ''}"
+            user = quote(req.user or "", safe="")
+            password = quote(req.password or "", safe="")
+            database = quote(req.database or "", safe="")
+            uri = f"postgresql://{user}:{password}@{raw_host}:{req.port or 5432}/{database}"
+        elif engine in ["mysql", "mariadb"]:
+            user = quote(req.user or "", safe="")
+            password = quote(req.password or "", safe="")
+            database = quote(req.database or "", safe="")
+            uri = f"{engine}://{user}:{password}@{raw_host}:{req.port or 3306}/{database}"
+        elif engine in ["mssql", "sqlserver", "azure_sql"]:
+            user = quote(req.user or "", safe="")
+            password = quote(req.password or "", safe="")
+            database = quote(req.database or "", safe="")
+            uri = f"mssql://{user}:{password}@{raw_host}:{req.port or 1433}/{database}"
         elif engine in ["mongodb", "mongo"]:
             scheme = "mongodb+srv" if ".mongodb.net" in raw_host else "mongodb"
             port_part = "" if scheme == "mongodb+srv" else f":{req.port or 27017}"
@@ -45,18 +78,74 @@ def _build_uri_from_request(req: Any, engine: str) -> str:
     return uri
 
 
+def _relational_connection_args(req: Any, engine: str, uri: str = "") -> Dict[str, Any]:
+    """Resolve relational driver arguments from either structured fields or a URI."""
+    host = getattr(req, "host", None) or "127.0.0.1"
+    port = getattr(req, "port", None)
+    user = getattr(req, "user", None) or ""
+    password = getattr(req, "password", None) or ""
+    database = getattr(req, "database", None)
+    raw_uri = (uri or getattr(req, "connectionUri", None) or "").strip()
+    if not raw_uri and isinstance(host, str) and "://" in host:
+        raw_uri = host
+
+    if raw_uri:
+        parsed = urlsplit(raw_uri)
+        accepted_schemes = {
+            "mysql": {"mysql", "mariadb"},
+            "mariadb": {"mysql", "mariadb"},
+            "mssql": {"mssql", "mssql+pymssql", "sqlserver"},
+            "sqlserver": {"mssql", "mssql+pymssql", "sqlserver"},
+            "azure_sql": {"mssql", "mssql+pymssql", "sqlserver"},
+        }
+        if parsed.scheme.lower() not in accepted_schemes.get(engine, set()):
+            raise ValueError(f"Connection URI scheme does not match {engine}.")
+        host = parsed.hostname or ""
+        port = parsed.port
+        user = unquote(parsed.username or "")
+        password = unquote(parsed.password or "")
+        database = unquote(parsed.path.lstrip("/")) or None
+
+    default_port = 3306 if engine in {"mysql", "mariadb"} else 1433
+    return {
+        "host": host,
+        "port": int(port or default_port),
+        "user": user,
+        "password": password,
+        "database": database or None,
+    }
+
+
+def _select_requested_table(requested: Any, available: List[str]) -> str:
+    if requested:
+        if requested not in available:
+            raise ValueError("Requested table was not found in the connected database.")
+        return requested
+    if not available:
+        raise ValueError("No tables found in the connected database.")
+    return available[0]
+
+
 def test_database_connection(req: StoreCredentialRequest) -> Dict[str, Any]:
     start_t = time.time()
     engine = req.engine.lower()
     uri = _build_uri_from_request(req, engine)
 
-    if not uri or "<" in uri or "user:password" in uri or "••••" in uri or "target-db.internal" in uri or "ep-sweet-neon" in uri:
+    if (
+        not uri
+        or (not req.connectionUri and not req.host)
+        or "<" in uri
+        or "user:password" in uri
+        or "••••" in uri
+        or "target-db.internal" in uri
+        or "ep-sweet-neon" in uri
+    ):
         return {
             "success": False,
             "engine": engine,
             "latencyMs": 0,
             "error": "Missing or placeholder database credentials. Please provide valid live credentials.",
-            "message": "Connection verification failed: Valid host, username, and password credentials are required."
+            "message": "Placeholder credentials rejected: valid host, username, and password credentials are required."
         }
 
     try:
@@ -140,142 +229,108 @@ def test_database_connection(req: StoreCredentialRequest) -> Dict[str, Any]:
                     "demo_mode": True,
                     "message": "Connected to DataX MySQL Enterprise Demo Sandbox."
                 }
-            try:
-                import pymysql
-                host = req.host or "127.0.0.1"
-                port = int(req.port or 3306)
-                user = req.user or "root"
-                password = req.password or ""
-                database = req.database or None
-                conn = pymysql.connect(
-                    host=host,
-                    port=port,
-                    user=user,
-                    password=password,
-                    database=database,
-                    connect_timeout=3
-                )
-                with conn.cursor() as cur:
-                    cur.execute("SHOW TABLES;")
-                    tables = [r[0] for r in cur.fetchall()]
-                conn.close()
-                latency = int((time.time() - start_t) * 1000)
-                return {
-                    "success": True,
-                    "engine": "mysql",
-                    "latencyMs": latency,
-                    "database": database or "default",
-                    "tables": tables,
-                    "tableCount": len(tables),
-                    "message": f"Successfully connected to MySQL at {host}:{port}! Discovered {len(tables)} tables."
-                }
-            except Exception as me:
+            if pymysql is None:
                 return {
                     "success": False,
                     "engine": engine,
                     "latencyMs": int((time.time() - start_t) * 1000),
-                    "error": str(me),
-                    "message": f"MySQL connection failed: {str(me)}"
+                    "status": "PYMYSQL_NOT_INSTALLED",
+                    "error": "MySQL/MariaDB driver 'PyMySQL' is not installed.",
+                    "message": "Cannot verify MySQL/MariaDB: install PyMySQL.",
                 }
-
-        elif engine in ["snowflake"]:
-            if req.host in ("demo-sandbox", "sandbox.datax.internal") or req.database == "demo_sandbox":
-                latency = int((time.time() - start_t) * 1000)
-                demo_tables = ["RAW_ORDERS", "RAW_CUSTOMERS", "DIM_PRODUCTS", "FACT_SALES"]
-                return {
-                    "success": True,
-                    "engine": "snowflake",
-                    "latencyMs": latency,
-                    "database": "DEMO_SANDBOX",
-                    "tables": demo_tables,
-                    "tableCount": len(demo_tables),
-                    "demo_mode": True,
-                    "message": "Connected to DataX Snowflake Demo Sandbox."
-                }
+            connection = pymysql.connect(
+                **_relational_connection_args(req, engine, uri),
+                connect_timeout=5,
+                cursorclass=pymysql.cursors.DictCursor,
+            )
             try:
-                import snowflake.connector
-                conn = snowflake.connector.connect(
-                    user=req.user or "",
-                    password=req.password or "",
-                    account=req.host or "",
-                    database=req.database or "",
-                    login_timeout=4
-                )
-                cur = conn.cursor()
-                cur.execute("SHOW TABLES;")
-                tables = [r[1] for r in cur.fetchall()]
-                conn.close()
-                latency = int((time.time() - start_t) * 1000)
-                return {
-                    "success": True,
-                    "engine": "snowflake",
-                    "latencyMs": latency,
-                    "database": req.database or "SNOWFLAKE",
-                    "tables": tables,
-                    "tableCount": len(tables),
-                    "message": f"Successfully connected to Snowflake! Discovered {len(tables)} tables."
-                }
-            except Exception as sfe:
+                with connection.cursor() as cur:
+                    cur.execute("""
+                        SELECT table_name
+                        FROM information_schema.tables
+                        WHERE table_schema = DATABASE()
+                        ORDER BY table_name
+                    """)
+                    tables = [
+                        table_name
+                        for row in cur.fetchall()
+                        for table_name in [row.get("TABLE_NAME") or row.get("table_name")]
+                        if table_name
+                    ]
+            finally:
+                connection.close()
+            latency = int((time.time() - start_t) * 1000)
+            return {
+                "success": True,
+                "engine": engine,
+                "latencyMs": latency,
+                "database": req.database or "MySQL",
+                "tables": tables,
+                "tableCount": len(tables),
+                "message": f"Successfully connected to {engine.upper()}! Discovered {len(tables)} tables.",
+            }
+
+        elif engine in ["mssql", "sqlserver", "azure_sql"]:
+            if pymssql is None:
                 return {
                     "success": False,
-                    "engine": "snowflake",
+                    "engine": engine,
                     "latencyMs": int((time.time() - start_t) * 1000),
-                    "error": str(sfe),
-                    "message": f"Snowflake connection failed: {str(sfe)}"
+                    "status": "PYMSSQL_NOT_INSTALLED",
+                    "error": "Microsoft SQL Server driver 'pymssql' is not installed.",
+                    "message": "Cannot verify SQL Server: install pymssql.",
                 }
-
-        elif engine in ["sqlserver", "mssql"]:
+            args = _relational_connection_args(req, engine, uri)
+            connection = pymssql.connect(
+                server=args["host"],
+                port=str(args["port"]),
+                user=args["user"],
+                password=args["password"],
+                database=args["database"],
+                login_timeout=5,
+            )
             try:
-                import pyodbc
-                conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={req.host},{req.port or 1433};DATABASE={req.database or 'master'};UID={req.user or ''};PWD={req.password or ''}"
-                conn = pyodbc.connect(conn_str, timeout=3)
-                cur = conn.cursor()
-                cur.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
-                tables = [r[0] for r in cur.fetchall()]
-                conn.close()
-                latency = int((time.time() - start_t) * 1000)
-                return {
-                    "success": True,
-                    "engine": "sqlserver",
-                    "latencyMs": latency,
-                    "database": req.database or "master",
-                    "tables": tables,
-                    "tableCount": len(tables),
-                    "message": f"Successfully connected to SQL Server! Discovered {len(tables)} tables."
-                }
-            except Exception as ms_err:
-                return {
-                    "success": False,
-                    "engine": "sqlserver",
-                    "latencyMs": int((time.time() - start_t) * 1000),
-                    "error": str(ms_err),
-                    "message": f"SQL Server connection failed: {str(ms_err)}"
-                }
+                cursor = connection.cursor(as_dict=True)
+                try:
+                    cursor.execute("""
+                        SELECT TABLE_NAME
+                        FROM INFORMATION_SCHEMA.TABLES
+                        WHERE TABLE_TYPE = 'BASE TABLE'
+                        ORDER BY TABLE_NAME
+                    """)
+                    tables = [
+                        table_name
+                        for row in cursor.fetchall()
+                        for table_name in [row.get("TABLE_NAME") or row.get("table_name")]
+                        if table_name
+                    ]
+                finally:
+                    cursor.close()
+            finally:
+                connection.close()
+            latency = int((time.time() - start_t) * 1000)
+            return {
+                "success": True,
+                "engine": "mssql",
+                "latencyMs": latency,
+                "database": req.database or "SQL Server",
+                "tables": tables,
+                "tableCount": len(tables),
+                "message": f"Successfully connected to Microsoft SQL Server! Discovered {len(tables)} tables.",
+            }
 
         elif engine in ["sap_bw", "s4_hana", "sap"]:
-            if req.host in ("demo-sandbox", "sandbox.datax.internal") or req.database == "demo_sandbox":
-                latency = int((time.time() - start_t) * 1000)
-                table_details = [
-                    {"name": "0PUR_C01", "rows": "1,420 rows", "rowCount": 1420},
-                    {"name": "0IC_C03", "rows": "8,450 rows", "rowCount": 8450},
-                    {"name": "BAPI_PO_CREATE1", "rows": "1,200 rows", "rowCount": 1200},
-                    {"name": "MARA", "rows": "3,120 rows", "rowCount": 3120},
-                    {"name": "EKKO", "rows": "640 rows", "rowCount": 640},
-                    {"name": "EKPO", "rows": "2,180 rows", "rowCount": 2180}
-                ]
-                tables = [t["name"] for t in table_details]
+            if hdbcli is None:
                 return {
-                    "success": True,
+                    "success": False,
                     "engine": engine,
-                    "latencyMs": latency,
-                    "database": "SAP_DEMO_SANDBOX",
-                    "tables": tables,
-                    "tableDetails": table_details,
-                    "tableCount": len(tables),
-                    "demo_mode": True,
-                    "message": "Connected to SAP S/4HANA Enterprise Demo Sandbox."
+                    "latencyMs": int((time.time() - start_t) * 1000),
+                    "status": "HDBCLI_NOT_INSTALLED",
+                    "driverStatus": "HDBCLI_NOT_INSTALLED",
+                    "error": "SAP HANA driver 'hdbcli' is not installed.",
+                    "message": "Cannot verify live SAP HANA: install hdbcli or load the certified SAP sandbox dataset.",
+                    "sandboxAction": "Load Certified SAP Sandbox Dataset",
                 }
-
             target_host = req.host or ""
             target_port = int(req.port or 443)
             if not target_host and uri:
@@ -287,70 +342,57 @@ def test_database_connection(req: StoreCredentialRequest) -> Dict[str, Any]:
                     "success": False,
                     "engine": engine,
                     "latencyMs": 0,
-                    "error": "Missing SAP HANA host. Please provide your HANA Cloud endpoint or select Demo Sandbox.",
+                    "error": "Missing SAP HANA host. Please provide your HANA Cloud endpoint or paste BTP Service Key.",
                     "message": "Connection verification failed: Host endpoint is required."
                 }
 
             try:
-                # Real TCP connectivity test
-                sock = socket.create_connection((target_host, target_port), timeout=3)
-                sock.close()
-                # Check for hdbcli authentication if credentials supplied
-                try:
-                    from hdbcli import dbapi
-                    hdb_conn = dbapi.connect(
-                        address=target_host,
-                        port=target_port,
-                        user=req.user or "",
-                        password=req.password or "",
-                        timeout=3
-                    )
-                    cur = hdb_conn.cursor()
-                    cur.execute("SELECT TABLE_NAME FROM SYS.TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA")
-                    tables = [r[0] for r in cur.fetchall()]
-                    hdb_conn.close()
-                    latency = int((time.time() - start_t) * 1000)
-                    return {
-                        "success": True,
-                        "engine": engine,
-                        "latencyMs": latency,
-                        "database": req.database or "HANA",
-                        "tables": tables,
-                        "tableCount": len(tables),
-                        "message": f"Successfully authenticated to SAP HANA ({target_host}:{target_port})! Discovered {len(tables)} tables."
-                    }
-                except ImportError:
-                    return {
-                        "success": False,
-                        "engine": engine,
-                        "latencyMs": int((time.time() - start_t) * 1000),
-                        "error": "SAP HANA native client (hdbcli) is not installed on this host.",
-                        "message": f"Network port {target_port} reachable, but SAP native driver (hdbcli) is missing for authentication."
-                    }
-                except Exception as he:
-                    return {
-                        "success": False,
-                        "engine": engine,
-                        "latencyMs": int((time.time() - start_t) * 1000),
-                        "error": str(he),
-                        "message": f"SAP HANA authentication failed at {target_host}:{target_port}: {str(he)}"
-                    }
+                connection = hdbcli.connect(
+                    address=target_host,
+                    port=target_port,
+                    user=req.user or "",
+                    password=req.password or "",
+                    connectTimeout=3000,
+                )
+                cursor = connection.cursor()
+                cursor.execute("SELECT CURRENT_SCHEMA FROM DUMMY")
+                cursor.fetchone()
+                cursor.execute("""
+                    SELECT TABLE_NAME
+                    FROM SYS.TABLES
+                    WHERE SCHEMA_NAME = CURRENT_SCHEMA
+                    ORDER BY TABLE_NAME
+                """)
+                tables = [row[0] for row in cursor.fetchall()]
+                cursor.close()
+                connection.close()
             except Exception as se:
                 return {
                     "success": False,
                     "engine": engine,
                     "latencyMs": int((time.time() - start_t) * 1000),
                     "error": str(se),
-                    "message": f"Cannot reach SAP HANA Cloud at {target_host}:{target_port} ({str(se)}). Verify instance is online."
+                    "message": f"Cannot reach SAP HANA Cloud at {target_host}:{target_port} ({str(se)}). Verify instance is RUNNING in BTP."
                 }
+            latency = int((time.time() - start_t) * 1000)
+            return {
+                "success": True,
+                "engine": engine,
+                "latencyMs": latency,
+                "database": req.database or "DATAX_STAGING",
+                "tables": tables,
+                "tableCount": len(tables),
+                "message": f"Successfully connected to SAP HANA Cloud ({target_host}:{target_port})!"
+            }
 
         else:
             return {
                 "success": False,
                 "engine": engine,
                 "latencyMs": int((time.time() - start_t) * 1000),
-                "error": f"Unsupported or unconfigured database engine: '{engine}'.",
-                "message": f"Live connection verification for '{engine.upper()}' requires active driver and valid connection credentials."
+                "status": "UNSUPPORTED_OR_UNCONFIGURED_DRIVER",
+                "error": f"Unsupported or unconfigured driver: Database engine '{engine}' is not supported.",
+                "message": f"Unsupported database engine '{engine}'.",
             }
 
     except Exception as e:
@@ -365,26 +407,21 @@ def test_database_connection(req: StoreCredentialRequest) -> Dict[str, Any]:
 def sample_table_data(req: SampleDataRequest) -> Dict[str, Any]:
     start_t = time.time()
     engine = req.engine.lower()
-    uri = get_resolved_uri(req) or _build_uri_from_request(req, engine)
+    if getattr(req, "credentialId", None):
+        uri = get_resolved_uri(req)
+    else:
+        uri = (getattr(req, "connectionUri", None) or "").strip()
+    uri = uri or _build_uri_from_request(req, engine)
 
-    if not uri or "<" in uri or "user:password" in uri or "••••" in uri or "target-db.internal" in uri or "ep-sweet-neon" in uri:
-        if engine in ["sap_bw", "s4_hana", "sap"] or (req.table and any(t in req.table for t in ["0PUR", "0IC", "BAPI", "MARA", "EKKO", "EKPO"])):
-            limit_val = min(max(req.limit or 25, 1), 100)
-            target_tbl = req.table or "0PUR_C01"
-            sample_erp, columns, total_rows = get_sap_table_sample(target_tbl, limit=limit_val)
-            return {
-                "success": True,
-                "engine": engine,
-                "database": req.database or "DATAX_STAGING",
-                "table": target_tbl,
-                "availableTables": ["0PUR_C01", "0IC_C03", "BAPI_PO_CREATE1", "MARA", "EKKO", "EKPO"],
-                "count": len(sample_erp),
-                "totalRows": total_rows,
-                "columns": columns,
-                "rows": sample_erp,
-                "latencyMs": 85,
-                "message": f"Sampled {len(sample_erp)} authentic records for SAP table '{target_tbl}' ({total_rows:,} total rows in catalog)."
-            }
+    if (
+        not uri
+        or (not req.connectionUri and not req.host and not getattr(req, "credentialId", None))
+        or "<" in uri
+        or "user:password" in uri
+        or "••••" in uri
+        or "target-db.internal" in uri
+        or "ep-sweet-neon" in uri
+    ):
         return {
             "success": False,
             "engine": engine,
@@ -468,15 +505,13 @@ def sample_table_data(req: SampleDataRequest) -> Dict[str, Any]:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
                         cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;")
                         all_tables = [r["table_name"] for r in cur.fetchall()]
-                        table_name = req.table if (req.table and req.table in all_tables) else (all_tables[0] if all_tables else "users")
-                        cur.execute(f'SELECT * FROM "{table_name}" LIMIT {limit_val};')
+                        table_name = _select_requested_table(req.table, all_tables)
+                        safe_table = table_name.replace('"', '""')
+                        cur.execute(f'SELECT * FROM "{safe_table}" LIMIT {limit_val};')
                         raw_data = cur.fetchall()
-                        try:
-                            cur.execute(f'SELECT COUNT(*) AS cnt FROM "{table_name}";')
-                            cnt_row = cur.fetchone()
-                            total_rows = int(cnt_row["cnt"]) if cnt_row else len(raw_data)
-                        except Exception:
-                            total_rows = len(raw_data)
+                        cur.execute(f'SELECT COUNT(*) AS cnt FROM "{safe_table}";')
+                        cnt_row = cur.fetchone()
+                        total_rows = int(cnt_row["cnt"])
                         return raw_data, table_name, all_tables, total_rows
 
             raw_data, table_name, all_tables, total_rows = _sample_pg()
@@ -510,126 +545,159 @@ def sample_table_data(req: SampleDataRequest) -> Dict[str, Any]:
 
         elif engine in ["mysql", "mariadb"]:
             if req.host in ("demo-sandbox", "sandbox.datax.internal") or req.database == "demo_sandbox":
-                demo_rows = [
-                    {"order_id": 1001, "customer_name": "Infosys Ltd", "amount": 450000.0, "status": "COMPLETED", "cluster": "Mysuru"},
-                    {"order_id": 1002, "customer_name": "Wipro Technologies", "amount": 780000.0, "status": "IN_REVIEW", "cluster": "Mangaluru"},
-                    {"order_id": 1003, "customer_name": "Biocon GCC", "amount": 320000.0, "status": "APPROVED", "cluster": "Hubballi"},
-                    {"order_id": 1004, "customer_name": "Bosch ESDM", "amount": 1250000.0, "status": "PENDING_AUDIT", "cluster": "Belagavi"},
-                    {"order_id": 1005, "customer_name": "Applied Materials", "amount": 950000.0, "status": "COMPLETED", "cluster": "Kalaburagi"},
-                ]
+                latency = int((time.time() - start_t) * 1000)
+                demo_tables = ["orders", "order_items", "customers", "inventory", "vendor_master"]
                 return {
                     "success": True,
                     "engine": "mysql",
+                    "latencyMs": latency,
                     "database": "demo_sandbox",
-                    "table": req.table or "orders",
-                    "availableTables": ["orders", "order_items", "customers", "inventory", "vendor_master"],
-                    "count": len(demo_rows),
-                    "totalRows": 15420,
-                    "columns": list(demo_rows[0].keys()),
-                    "rows": demo_rows,
-                    "latencyMs": 42,
-                    "message": "Sampled 5 verified records from MySQL Demo Sandbox."
+                    "tables": demo_tables,
+                    "tableCount": len(demo_tables),
+                    "demo_mode": True,
+                    "message": "Connected to DataX MySQL Enterprise Demo Sandbox."
                 }
-            import pymysql
-            import re
-            host = req.host or "127.0.0.1"
-            port = int(req.port or 3306)
-            user = req.user or "root"
-            password = req.password or ""
-            database = req.database or None
-            conn = pymysql.connect(
-                host=host,
-                port=port,
-                user=user,
-                password=password,
-                database=database,
-                connect_timeout=3,
-                cursorclass=pymysql.cursors.DictCursor
+            if pymysql is None:
+                return {
+                    "success": False,
+                    "engine": engine,
+                    "status": "PYMYSQL_NOT_INSTALLED",
+                    "error": "MySQL/MariaDB driver 'PyMySQL' is not installed.",
+                    "rows": [],
+                    "columns": [],
+                }
+            connection = pymysql.connect(
+                **_relational_connection_args(req, engine, uri),
+                connect_timeout=5,
+                cursorclass=pymysql.cursors.DictCursor,
             )
             try:
-                with conn.cursor() as cur:
-                    cur.execute("SHOW TABLES;")
-                    tables_raw = [list(r.values())[0] for r in cur.fetchall()]
-                    table_name = req.table if (req.table and req.table in tables_raw) else (tables_raw[0] if tables_raw else "orders")
-                    clean_tbl = re.sub(r'[^a-zA-Z0-9_]', '', table_name)
-                    cur.execute(f"SELECT * FROM `{clean_tbl}` LIMIT {limit_val};")
+                with connection.cursor() as cur:
+                    cur.execute("""
+                        SELECT table_name
+                        FROM information_schema.tables
+                        WHERE table_schema = DATABASE()
+                        ORDER BY table_name
+                    """)
+                    all_tables = [
+                        table_name
+                        for row in cur.fetchall()
+                        for table_name in [row.get("TABLE_NAME") or row.get("table_name")]
+                        if table_name
+                    ]
+                    table_name = _select_requested_table(req.table, all_tables)
+                    safe_table = table_name.replace("`", "``")
+                    cur.execute(f"SELECT * FROM `{safe_table}` LIMIT %s", (limit_val,))
                     raw_data = cur.fetchall()
-                    try:
-                        cur.execute(f"SELECT COUNT(*) AS cnt FROM `{clean_tbl}`;")
-                        cnt_row = cur.fetchone()
-                        total_rows = int(cnt_row["cnt"]) if cnt_row else len(raw_data)
-                    except Exception:
-                        total_rows = len(raw_data)
+                    cur.execute(f"SELECT COUNT(*) AS cnt FROM `{safe_table}`")
+                    total_rows = int(cur.fetchone()["cnt"])
             finally:
-                conn.close()
-
+                connection.close()
             rows = []
-            for r in raw_data:
-                clean_r = {}
-                for k, v in r.items():
-                    if isinstance(v, Decimal):
-                        clean_r[k] = float(v)
-                    elif isinstance(v, (datetime, date)):
-                        clean_r[k] = v.isoformat()
-                    else:
-                        clean_r[k] = v
-                rows.append(clean_r)
-
+            for row in raw_data:
+                rows.append({
+                    key: value.isoformat() if isinstance(value, (datetime,)) else float(value) if isinstance(value, Decimal) else value
+                    for key, value in row.items()
+                })
             columns = list(rows[0].keys()) if rows else []
-            latency = int((time.time() - start_t) * 1000)
             return {
                 "success": True,
-                "engine": "mysql",
-                "database": database or "MySQL",
+                "engine": engine,
+                "database": req.database or "MySQL",
                 "table": table_name,
-                "availableTables": tables_raw,
+                "availableTables": all_tables,
                 "count": len(rows),
                 "totalRows": total_rows,
                 "columns": columns,
                 "rows": rows,
-                "latencyMs": latency,
-                "message": f"Sampled {len(rows)} live rows from MySQL table '{table_name}' ({total_rows:,} total rows)."
+                "latencyMs": int((time.time() - start_t) * 1000),
+                "message": f"Sampled {len(rows)} live rows from table '{table_name}'.",
             }
 
-        elif engine in ["sqlserver", "mssql"]:
-            import pyodbc
-            import re
-            host = req.host or "127.0.0.1"
-            port = int(req.port or 1433)
-            user = req.user or ""
-            password = req.password or ""
-            database = req.database or "master"
-            clean_tbl = re.sub(r'[^a-zA-Z0-9_]', '', req.table or "users")
-            conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={host},{port};DATABASE={database};UID={user};PWD={password}"
-            conn = pyodbc.connect(conn_str, timeout=3)
+        elif engine in ["mssql", "sqlserver", "azure_sql"]:
+            if pymssql is None:
+                return {
+                    "success": False,
+                    "engine": engine,
+                    "status": "PYMSSQL_NOT_INSTALLED",
+                    "error": "Microsoft SQL Server driver 'pymssql' is not installed.",
+                    "rows": [],
+                    "columns": [],
+                }
+            args = _relational_connection_args(req, engine, uri)
+            connection = pymssql.connect(
+                server=args["host"],
+                port=str(args["port"]),
+                user=args["user"],
+                password=args["password"],
+                database=args["database"],
+                login_timeout=5,
+            )
             try:
-                cur = conn.cursor()
-                cur.execute(f"SELECT COUNT(*) FROM [{clean_tbl}];")
-                total_rows = int(cur.fetchone()[0])
-                cur.execute(f"SELECT TOP ({limit_val}) * FROM [{clean_tbl}];")
-                col_names = [d[0] for d in cur.description]
-                raw_data = cur.fetchall()
+                cursor = connection.cursor(as_dict=True)
+                try:
+                    cursor.execute("""
+                        SELECT TABLE_NAME
+                        FROM INFORMATION_SCHEMA.TABLES
+                        WHERE TABLE_TYPE = 'BASE TABLE'
+                        ORDER BY TABLE_NAME
+                    """)
+                    all_tables = [
+                        table_name
+                        for row in cursor.fetchall()
+                        for table_name in [row.get("TABLE_NAME") or row.get("table_name")]
+                        if table_name
+                    ]
+                    table_name = _select_requested_table(req.table, all_tables)
+                    safe_table = table_name.replace("]", "]]")
+                    cursor.execute(f"SELECT TOP ({limit_val}) * FROM [{safe_table}]")
+                    raw_data = cursor.fetchall()
+                    cursor.execute(f"SELECT COUNT(*) AS cnt FROM [{safe_table}]")
+                    total_rows = int(cursor.fetchone()["cnt"])
+                finally:
+                    cursor.close()
             finally:
-                conn.close()
-
-            rows = []
-            for r in raw_data:
-                item = {col_names[i]: _serialize_val(r[i]) if '_serialize_val' in globals() else str(r[i]) for i in range(len(col_names))}
-                rows.append(item)
-
-            latency = int((time.time() - start_t) * 1000)
+                connection.close()
+            rows = [{
+                key: value.isoformat() if isinstance(value, datetime) else float(value) if isinstance(value, Decimal) else value
+                for key, value in row.items()
+            } for row in raw_data]
+            columns = list(rows[0].keys()) if rows else []
             return {
                 "success": True,
-                "engine": "sqlserver",
-                "database": database,
-                "table": clean_tbl,
-                "availableTables": [clean_tbl],
+                "engine": "mssql",
+                "database": req.database or "SQL Server",
+                "table": table_name,
+                "availableTables": all_tables,
                 "count": len(rows),
                 "totalRows": total_rows,
-                "columns": col_names,
+                "columns": columns,
                 "rows": rows,
-                "latencyMs": latency,
-                "message": f"Sampled {len(rows)} live rows from SQL Server table '{clean_tbl}' ({total_rows:,} total rows)."
+                "latencyMs": int((time.time() - start_t) * 1000),
+                "message": f"Sampled {len(rows)} live rows from table '{table_name}'.",
+            }
+
+        elif engine in ["sap_bw", "s4_hana", "sap"]:
+            return {
+                "success": False,
+                "engine": engine,
+                "status": "HDBCLI_NOT_INSTALLED" if hdbcli is None else "SAP_HANA_SAMPLE_UNAVAILABLE",
+                "driverStatus": "HDBCLI_NOT_INSTALLED" if hdbcli is None else "HDBCLI_INSTALLED",
+                "error": "Live SAP HANA table sampling requires a configured hdbcli connector.",
+                "rows": [],
+                "columns": [],
+                "message": "No SAP HANA sample was returned; load the certified SAP sandbox dataset for demo data.",
+                "sandboxAction": "Load Certified SAP Sandbox Dataset",
+            }
+
+        else:
+            return {
+                "success": False,
+                "engine": engine,
+                "status": "UNSUPPORTED_OR_UNCONFIGURED_DRIVER",
+                "error": f"Unsupported or unconfigured driver: Database engine '{engine}' is not supported.",
+                "rows": [],
+                "columns": [],
             }
 
     except Exception as e:

@@ -471,7 +471,7 @@ export default function NodeConfigModal({
                   type="text"
                   value={host}
                   onChange={(e) => setHost(e.target.value)}
-                  placeholder="e.g. postgresql://user:pass@host:5432/db or https://s4hana.corp.example"
+                  placeholder="e.g. postgresql://host:5432/db or https://s4hana.corp.example"
                   className="w-full px-3.5 py-2 rounded-xl border border-[#CDD2DE] dark:border-white/[0.15] bg-[#F8FAFC] dark:bg-white/[0.04] text-xs font-mono text-[#0A0F1F] dark:text-white"
                 />
               </div>

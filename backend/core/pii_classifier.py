@@ -1,636 +1,638 @@
 """
-DataX Centralized DPDP 2025 & Global PII Classifier
-===================================================
-Module: backend/core/pii_classifier.py (Sprint 1 - S1-09)
+Unified PII and secret classifier for DataX.
 
-Provides mathematical checksum validation and regex classification for:
-  1. Aadhaar (12-digit Indian National ID with Verhoeff D5 dihedral group algorithm)
-  2. PAN (Indian Permanent Account Number with 4th-character entity type check)
-  3. GSTIN (15-char Indian Goods and Services Tax ID with Modulo-36 check digit)
-  4. IFSC (11-char Indian Financial System Code with 5th-character '0' guard)
-  5. UPI VPA (Indian Virtual Payment Address, e.g. user@okhdfcbank)
-  6. Indian Mobile (+91 / 0 prefix with 10 digits starting with 6, 7, 8, 9)
-  7. Credit Card (13-19 digit PCI-DSS with Luhn Modulo-10 checksum validation)
-  8. US SSN (9-digit Social Security Number with invalid area/group rules)
-  9. Email (RFC 5322 compliant)
-  10. API Secrets & Tokens (AWS AKIA, OpenAI sk-, GitHub ghp-, Slack xox-, Private Keys)
-
-Zero False-Positive Guarantee:
-  Random 12-digit strings (order IDs, inventory serials) fail the Verhoeff D5
-  checksum and are NEVER classified as Aadhaar numbers.
+This module provides deterministic, offline validation for Indian identifiers
+and common credential formats. Detection functions never make network calls.
 """
 
+import random
 import re
-from typing import List, Dict, Any, Optional
+from typing import Any, Iterable, List, Dict, Optional
+
+
+AADHAAR_REGEX = re.compile(r"(?<!\d)([2-9]\d{3}(?:[\s-]?\d{4}){2})(?!\d)")
+PAN_REGEX = re.compile(
+    r"(?<![A-Z0-9])([A-Z]{3}[PCAFHTBLJG][A-Z][0-9]{4}[A-Z])(?![A-Z0-9])",
+    re.IGNORECASE,
+)
+GSTIN_REGEX = re.compile(
+    r"(?<![A-Z0-9])([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])(?![A-Z0-9])",
+    re.IGNORECASE,
+)
+INDIAN_MOBILE_REGEX = re.compile(r"(?<!\d)(?:\+91[\s-]?|91[\s-]?|0)?([6-9]\d{9})(?!\d)")
+EMAIL_REGEX = re.compile(r"(?<![\w.+-])([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b")
+SSN_REGEX = re.compile(r"(?<!\d)(\d{3}-\d{2}-\d{4})(?!\d)")
+CREDIT_CARD_REGEX = re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
+PHONE_REGEX = re.compile(r"\b(?:\+?\d{1,3}[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}\b")
+IFSC_REGEX = re.compile(r"(?<![A-Z0-9])([A-Z]{4}0[A-Z0-9]{6})(?![A-Z0-9])", re.IGNORECASE)
+UPI_VPA_REGEX = re.compile(
+    r"(?<![A-Z0-9._-])([A-Z0-9._-]{2,256}@[A-Z][A-Z0-9.-]{1,63})(?![A-Z0-9.-])",
+    re.IGNORECASE,
+)
+UPI_PSP_HANDLES = frozenset({
+    "okaxis", "okhdfcbank", "ybl", "paytm", "ibl", "upi", "apl",
+    "okicici", "oksbi", "axl", "okbizaxis", "freecharge", "airtel",
+    "indus", "ikwik", "waicici", "wahdfcbank", "waaxis",
+})
+
+SECRET_PATTERNS = [
+    ("ANTHROPIC_API_KEY", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b")),
+    ("OPENAI_API_KEY", re.compile(r"\bsk-(?!ant-)(?:proj-)?[A-Za-z0-9_-]{20,}\b")),
+    ("AWS_ACCESS_KEY", re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b")),
+    ("AZURE_KEY", re.compile(
+        r"(?i)\b(?:azure(?:[_-]?storage)?[_-]?key|azure_openai(?:_api)?_key)\b"
+        r"\s*[:=]\s*[A-Za-z0-9+/=]{16,}"
+    )),
+    ("GITHUB_PAT", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")),
+    ("SLACK_TOKEN", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    ("GENERIC_BEARER_JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")),
+    ("DATABASE_URI", re.compile(
+        r"(?i)\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|mariadb|mssql|redis|snowflake|clickhouse)"
+        r"://[^/\s:@]+:[^@\s/]+@[^'\s]+"
+    )),
+    ("PRIVATE_KEY_HEADER", re.compile(
+        r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+        r"[\s\S]{0,8192}?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+    )),
+    ("GENERIC_SECRET", re.compile(
+        r"(?i)\b(?:password|passwd|secret|otp|auth|bearer|api[_-]?key|client[_-]?secret)"
+        r"\b\s*[:=]\s*(?:\"[^\"]+\"|'[^']+'|[^\s,;]+)"
+    )),
+]
+
+SENSITIVE_KEY_WORDS = (
+    "password", "passwd", "secret", "otp", "auth", "bearer",
+    "api_key", "apikey", "private_key", "github_pat", "slack",
+    "azure", "aws", "access_key", "client_secret",
+)
+SENSITIVE_PII_KEY_WORDS = (
+    "aadhaar", "pan", "gstin", "ssn", "credit_card", "card_number",
+    "upi", "ifsc", "mobile", "phone", "email",
+)
+
+VERHOEFF_D = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+    (1, 2, 3, 4, 0, 6, 7, 8, 9, 5),
+    (2, 3, 4, 0, 1, 7, 8, 9, 5, 6),
+    (3, 4, 0, 1, 2, 8, 9, 5, 6, 7),
+    (4, 0, 1, 2, 3, 9, 5, 6, 7, 8),
+    (5, 9, 8, 7, 6, 0, 4, 3, 2, 1),
+    (6, 5, 9, 8, 7, 1, 0, 4, 3, 2),
+    (7, 6, 5, 9, 8, 2, 1, 0, 4, 3),
+    (8, 7, 6, 5, 9, 3, 2, 1, 0, 4),
+    (9, 8, 7, 6, 5, 4, 3, 2, 1, 0),
+)
+VERHOEFF_P = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+    (1, 5, 7, 6, 2, 8, 3, 0, 9, 4),
+    (5, 8, 0, 3, 7, 9, 6, 1, 4, 2),
+    (8, 9, 1, 6, 0, 4, 3, 5, 2, 7),
+    (9, 4, 5, 3, 1, 2, 6, 8, 7, 0),
+    (4, 2, 8, 6, 5, 7, 3, 9, 0, 1),
+    (2, 7, 9, 3, 8, 0, 6, 4, 1, 5),
+    (7, 0, 4, 6, 9, 1, 3, 2, 5, 8),
+)
+VERHOEFF_INV = (0, 4, 3, 2, 1, 5, 6, 7, 8, 9)
+
+
+def _canonical_digits(value: Any) -> str:
+    return re.sub(r"\D", "", str(value)) if value is not None else ""
+
+
+def _verhoeff_check(number: str) -> str:
+    if not number.isdigit():
+        raise ValueError("Verhoeff input must contain digits only")
+    checksum = 0
+    for i, char in enumerate(reversed(number)):
+        checksum = VERHOEFF_D[checksum][VERHOEFF_P[(i + 1) % 8][int(char)]]
+    return str(VERHOEFF_INV[checksum])
+
+
+def is_valid_aadhaar(aadhaar: Any) -> bool:
+    if aadhaar is None:
+        return False
+    digits = re.sub(r"[\s-]", "", str(aadhaar))
+    if not re.fullmatch(r"[2-9]\d{11}", digits):
+        return False
+    if len(set(digits)) == 1:
+        return False
+    checksum = 0
+    for i, char in enumerate(reversed(digits)):
+        checksum = VERHOEFF_D[checksum][VERHOEFF_P[i % 8][int(char)]]
+    return checksum == 0
+
+
+is_valid_aadhaar_verhoeff = is_valid_aadhaar
+is_valid_aadhaar_number = is_valid_aadhaar
+
+
+def is_valid_indian_state_code(state_code: Any) -> bool:
+    code = str(state_code).strip().zfill(2)
+    if not re.fullmatch(r"\d{2}", code):
+        return False
+    number = int(code)
+    return 1 <= number <= 38 or number in {97, 99}
+
+
+def _mod36_value(char: str) -> int:
+    return int(char) if char.isdigit() else ord(char.upper()) - ord("A") + 10
+
+
+def _mod36_char(value: int) -> str:
+    chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    return chars[value % 36]
+
+
+def is_valid_pan(pan: Any) -> bool:
+    value = str(pan).strip().upper()
+    if not re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", value):
+        return False
+    return value[3] in "PCAFHTBLJG"
+
+
+is_valid_pan_mod36 = is_valid_pan
+
+
+def is_valid_luhn(card_number: Any) -> bool:
+    value = str(card_number).strip()
+    if not re.fullmatch(r"\d[\d -]*\d", value):
+        return False
+    digits = re.sub(r"[ -]", "", value)
+    if not 13 <= len(digits) <= 19:
+        return False
+    total = 0
+    for index, char in enumerate(reversed(digits)):
+        digit = int(char)
+        if index % 2:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        total += digit
+    return total % 10 == 0
+
+
+def is_valid_ssn(ssn: Any) -> bool:
+    value = str(ssn).strip()
+    match = re.fullmatch(r"(\d{3})-(\d{2})-(\d{4})", value)
+    if not match:
+        return False
+    area, group, serial = match.groups()
+    return area not in {"000", "666"} and not area.startswith("9") and group != "00" and serial != "0000"
+
+
+def is_valid_ifsc(ifsc: Any) -> bool:
+    return re.fullmatch(r"[A-Z]{4}0[A-Z0-9]{6}", str(ifsc).strip().upper()) is not None
+
+
+def is_valid_upi_vpa(vpa: Any) -> bool:
+    match = UPI_VPA_REGEX.fullmatch(str(vpa).strip())
+    return match is not None and match.group(1).rsplit("@", 1)[1].lower() in UPI_PSP_HANDLES
+
+
+def is_valid_phone(phone: Any) -> bool:
+    digits = _canonical_digits(phone)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    return (
+        len(digits) == 10
+        and digits[0] in "23456789"
+        and digits[3] in "23456789"
+    )
+
+
+def is_valid_gstin(gstin: Any) -> bool:
+    value = str(gstin).strip().upper()
+    if not re.fullmatch(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]", value):
+        return False
+    if not is_valid_indian_state_code(value[:2]):
+        return False
+    if not is_valid_pan(value[2:12]):
+        return False
+    total = 0
+    for i, char in enumerate(value[:-1]):
+        factor = 1 if i % 2 == 0 else 2
+        result = factor * _mod36_value(char)
+        total += (result // 36) + (result % 36)
+    remainder = total % 36
+    check_code = (36 - remainder) % 36
+    return _mod36_char(check_code) == value[-1]
+
+
+is_valid_gst = is_valid_gstin
+
+
+def is_valid_mobile(mobile: Any) -> bool:
+    value = str(mobile).strip()
+    match = re.fullmatch(r"(?:\+91[\s-]?|91[\s-]?|0)?([6-9]\d{9})", value)
+    return match is not None
+
+
+def is_sensitive_key(key: Any) -> bool:
+    if key is None:
+        return False
+    normalized = re.sub(r"[^a-z0-9]+", "_", str(key).lower()).strip("_")
+    return any(word in normalized for word in SENSITIVE_KEY_WORDS)
+
+
+def _generator_rng(orig: Any, seed: Any) -> random.Random:
+    if seed is None:
+        return random.Random()
+    return random.Random(f"{seed!r}:{orig!r}")
+
+
+def _preserve_separators(original: str, generated: str) -> str:
+    output = []
+    generated_index = 0
+    for char in original:
+        if char.isalnum():
+            replacement = generated[generated_index]
+            output.append(replacement.lower() if char.islower() else replacement)
+            generated_index += 1
+        else:
+            output.append(char)
+    return "".join(output) if generated_index == len(generated) else generated
+
+
+def generate_synthetic_aadhaar(orig: Optional[Any] = None, seed: Optional[Any] = None) -> str:
+    if isinstance(orig, int) and seed is None:
+        seed, orig = orig, None
+    original = str(orig) if orig is not None else ""
+    rng = _generator_rng(original, seed)
+    first_eleven = "9999" + "".join(str(rng.randrange(10)) for _ in range(7))
+    digits = first_eleven + _verhoeff_check(first_eleven)
+    if original and len(_canonical_digits(original)) == 12:
+        return _preserve_separators(original, digits)
+    return f"{digits[:4]} {digits[4:8]} {digits[8:]}"
+
+
+def generate_synthetic_pan(orig: Optional[Any] = None, seed: Optional[Any] = None) -> str:
+    if isinstance(orig, int) and seed is None:
+        seed, orig = orig, None
+    original = str(orig) if orig is not None else ""
+    rng = _generator_rng(original, seed)
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    entity_class = original[3].upper() if re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", original.upper()) else "P"
+    pan = "".join(rng.choice(letters) for _ in range(3))
+    pan += entity_class + rng.choice(letters)
+    pan += "".join(str(rng.randrange(10)) for _ in range(4))
+    pan += rng.choice(letters)
+    return _preserve_separators(original, pan) if original and len(re.sub(r"[^A-Z0-9]", "", original.upper())) == 10 else pan
+
+
+def generate_synthetic_aadhaar_number(orig: Optional[Any] = None, seed: Optional[Any] = None) -> str:
+    return generate_synthetic_aadhaar(orig, seed).replace(" ", "").replace("-", "")
+
+
+def generate_synthetic_pan_org(orig: Optional[Any] = None, seed: Optional[Any] = None) -> str:
+    return generate_synthetic_pan(orig, seed)
+
+
+def generate_synthetic_gstin(
+    orig: Optional[Any] = None,
+    seed: Optional[Any] = None,
+    state_code: str = "27",
+) -> str:
+    if isinstance(orig, int):
+        if isinstance(seed, str):
+            state_code, seed = seed, orig
+        elif seed is None:
+            seed, orig = orig, None
+    original = str(orig) if orig is not None else ""
+    rng = _generator_rng(original, seed)
+    source_state = original[:2] if re.fullmatch(r"\d{2}", original[:2]) else str(state_code).zfill(2)
+    output_state = source_state if is_valid_indian_state_code(source_state) else str(state_code).zfill(2)
+    pan_source = original[2:12] if len(original) >= 12 and is_valid_pan(original[2:12]) else None
+    pan = generate_synthetic_pan(pan_source, seed=f"{seed!r}:{original!r}")
+    entity = original[12] if len(original) > 12 and re.fullmatch(r"[1-9A-Z]", original[12].upper()) else rng.choice("123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    base = f"{output_state}{pan}{entity.upper()}Z"
+    total = 0
+    for i, char in enumerate(base):
+        factor = 1 if i % 2 == 0 else 2
+        result = factor * _mod36_value(char)
+        total += (result // 36) + (result % 36)
+    check_code = _mod36_char((36 - (total % 36)) % 36)
+    generated = base + check_code
+    return _preserve_separators(original, generated) if original and len(re.sub(r"[^A-Z0-9]", "", original.upper())) == 15 else generated
+
+
+is_valid_aadhaar_uidai = is_valid_aadhaar
+is_valid_aadhaar_checksum = is_valid_aadhaar
+is_valid_gstin_mod36 = is_valid_gstin
+
+
+def _secret_matches(text: str) -> List[Dict[str, Any]]:
+    matches = []
+    for subtype, pattern in SECRET_PATTERNS:
+        for match in pattern.finditer(text):
+            matches.append({
+                "type": "SECRET",
+                "subtype": subtype,
+                "value": match.group(0),
+                "start": match.start(),
+                "end": match.end(),
+            })
+    return matches
+
+
+def scan_text(text: Any) -> Dict[str, Any]:
+    if text is None:
+        text = ""
+    if not isinstance(text, str):
+        text = str(text)
+
+    detections: List[Dict[str, Any]] = []
+    seen = set()
+    indian_mobile_spans = []
+
+    def add_detection(kind: str, subtype: str, match: re.Match, value: Optional[str] = None) -> None:
+        raw = value if value is not None else match.group(0)
+        key = (kind, subtype, raw, match.start(), match.end())
+        if key in seen:
+            return
+        seen.add(key)
+        detections.append({
+            "type": kind,
+            "subtype": subtype,
+            "value": raw,
+            "start": match.start(),
+            "end": match.end(),
+        })
+
+    for match in AADHAAR_REGEX.finditer(text):
+        if is_valid_aadhaar(match.group(1)):
+            add_detection("PII", "AADHAAR", match, match.group(1))
+
+    for match in PAN_REGEX.finditer(text):
+        if is_valid_pan(match.group(1)):
+            add_detection("PII", "PAN", match, match.group(1).upper())
+
+    for match in GSTIN_REGEX.finditer(text):
+        if is_valid_gstin(match.group(1)):
+            add_detection("PII", "GSTIN", match, match.group(1).upper())
+
+    for match in INDIAN_MOBILE_REGEX.finditer(text):
+        digits = _canonical_digits(match.group(0))
+        if digits.startswith("91") and len(digits) == 12:
+            digits = digits[2:]
+        elif digits.startswith("0") and len(digits) == 11:
+            digits = digits[1:]
+        if is_valid_mobile(digits):
+            add_detection("PII", "INDIAN_MOBILE", match, match.group(0).strip())
+            indian_mobile_spans.append((match.start(), match.end()))
+
+    for match in IFSC_REGEX.finditer(text):
+        if is_valid_ifsc(match.group(1)):
+            add_detection("PII", "IFSC", match, match.group(1).upper())
+
+    for match in UPI_VPA_REGEX.finditer(text):
+        if is_valid_upi_vpa(match.group(1)):
+            add_detection("PII", "UPI_VPA", match, match.group(1))
+
+    for match in CREDIT_CARD_REGEX.finditer(text):
+        if is_valid_luhn(match.group(0)):
+            add_detection("PII", "CREDIT_CARD", match)
+
+    for match in SSN_REGEX.finditer(text):
+        if is_valid_ssn(match.group(1)):
+            add_detection("PII", "SSN", match)
+
+    for match in EMAIL_REGEX.finditer(text):
+        add_detection("PII", "EMAIL", match, match.group(1))
+
+    for match in PHONE_REGEX.finditer(text):
+        overlaps_indian_mobile = any(
+            match.start() < end and start < match.end()
+            for start, end in indian_mobile_spans
+        )
+        if not overlaps_indian_mobile and is_valid_phone(match.group(0)):
+            add_detection("PII", "PHONE", match)
+
+    detections.extend(_secret_matches(text))
+    pii_priority = {
+        "GSTIN": 100,
+        "AADHAAR": 95,
+        "CREDIT_CARD": 90,
+        "SSN": 90,
+        "UPI_VPA": 85,
+        "IFSC": 80,
+        "PAN": 75,
+        "INDIAN_MOBILE": 70,
+        "EMAIL": 60,
+        "PHONE": 50,
+    }
+    def detection_priority(item: Dict[str, Any]) -> int:
+        if item["type"] == "SECRET":
+            return 110
+        return pii_priority.get(item["subtype"], 0)
+
+    selected = []
+    for candidate in sorted(
+        detections,
+        key=lambda item: (-detection_priority(item), item["start"], -(item["end"] - item["start"])),
+    ):
+        overlaps = any(
+            candidate["start"] < existing["end"] and existing["start"] < candidate["end"]
+            for existing in selected
+        )
+        if not overlaps:
+            selected.append(candidate)
+    detections = sorted(selected, key=lambda item: (item["start"], item["end"]))
+    return {
+        "has_pii": any(item["type"] == "PII" for item in detections),
+        "has_secrets": any(item["type"] == "SECRET" for item in detections),
+        "detections": detections,
+    }
+
+
+def pii_classifier(text: Any) -> Dict[str, Any]:
+    return scan_text(text)
+
+
+def scan_column(values: Iterable[Any], column_name: Optional[str] = None) -> Dict[str, Any]:
+    items = list(values or [])
+    detections: List[Dict[str, Any]] = []
+    for index, value in enumerate(items):
+        result = scan_text(value)
+        for detection in result["detections"]:
+            detections.append({
+                **detection,
+                "index": index,
+                "column": column_name,
+            })
+    if column_name and is_sensitive_key(column_name):
+        detections.append({
+            "type": "SECRET",
+            "subtype": "SENSITIVE_COLUMN_NAME",
+            "column": column_name,
+            "index": None,
+        })
+    elif column_name:
+        normalized_column = re.sub(r"[^a-z0-9]+", "_", column_name.lower())
+        if any(word in normalized_column for word in SENSITIVE_PII_KEY_WORDS):
+            detections.append({
+                "type": "PII",
+                "subtype": "SENSITIVE_COLUMN_NAME",
+                "column": column_name,
+                "index": None,
+            })
+    return {
+        "has_pii": any(item["type"] == "PII" for item in detections),
+        "has_secrets": any(item["type"] == "SECRET" for item in detections),
+        "detections": detections,
+    }
+
+
+# -----------------------------------------------------------------------------
+# Backward Compatibility & Extended Helpers from Head
+# -----------------------------------------------------------------------------
 from pydantic import BaseModel, Field
 
-# -----------------------------------------------------------------------------
-# Verhoeff Algorithm Tables (Dihedral Group D5 for Aadhaar)
-# -----------------------------------------------------------------------------
-VERHOEFF_D = [
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
-    [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
-    [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
-    [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
-    [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
-    [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
-    [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
-    [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
-    [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
-]
+def generate_verhoeff_check_digit(number_str: str) -> int:
+    clean = re.sub(r'\D', '', str(number_str))
+    c = 0
+    for i, d in enumerate(reversed(clean)):
+        c = VERHOEFF_D[c][VERHOEFF_P[(i + 1) % 8][int(d)]]
+    return VERHOEFF_INV[c]
 
-VERHOEFF_P = [
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
-    [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
-    [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
-    [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
-    [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
-    [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
-    [7, 0, 4, 6, 9, 1, 3, 2, 5, 8]
-]
+def is_valid_verhoeff(number_str: str) -> bool:
+    return _verhoeff_check(number_str)
 
-VERHOEFF_INV = [0, 4, 3, 2, 1, 5, 6, 7, 8, 9]
+def is_valid_upi(handle: str) -> bool:
+    return is_valid_upi_vpa(handle)
 
-# -----------------------------------------------------------------------------
-# GSTIN Modulo-36 Tables
-# -----------------------------------------------------------------------------
-GSTIN_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-GSTIN_STATE_CODES = {
-    "01", "02", "03", "04", "05", "06", "07", "08", "09", "10",
-    "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
-    "21", "22", "23", "24", "25", "26", "27", "28", "29", "30",
-    "31", "32", "33", "34", "35", "36", "37", "38", "97", "99"
-}
+def is_valid_indian_mobile(mobile: str) -> bool:
+    clean = re.sub(r'\D', '', str(mobile))
+    if clean.startswith('91') and len(clean) == 12:
+        clean = clean[2:]
+    elif clean.startswith('0') and len(clean) == 11:
+        clean = clean[1:]
+    return is_valid_mobile(clean)
 
-# -----------------------------------------------------------------------------
-# Regular Expressions (Format Pre-filters)
-# -----------------------------------------------------------------------------
-AADHAAR_REGEX = re.compile(r"\b([2-9]\d{3})[\s\-]?(\d{4})[\s\-]?(\d{4})\b")
-PAN_REGEX = re.compile(r"\b([A-Z]{3})([ABCFGHLJPT])([A-Z])(\d{4})([A-Z])\b")
-GSTIN_REGEX = re.compile(r"\b([0-3][0-9]|[9][79])([A-Z]{5}\d{4}[A-Z])([1-9A-Z])(Z)([0-9A-Z])\b")
-IFSC_REGEX = re.compile(r"\b([A-Z]{4})(0)([A-Z0-9]{6})\b")
-UPI_REGEX = re.compile(r"\b([a-zA-Z0-9.\-_]{2,64})@([a-zA-Z]{2,32})\b")
-INDIAN_MOBILE_REGEX = re.compile(r"(?:\+91[\-\s]?|0)?\b([6-9]\d{9})\b")
-CREDIT_CARD_REGEX = re.compile(r"\b(?:\d{4}[\-\s]?){3}\d{4}\b|\b\d{4}[\-\s]?\d{6}[\-\s]?\d{4,5}\b")
-SSN_REGEX = re.compile(r"\b(?!000|666|9\d{2})(\d{3})[\-]?(?!00)(\d{2})[\-]?(?!0000)(\d{4})\b")
-EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+def is_valid_luhn_credit_card(card_number: str) -> bool:
+    return is_valid_luhn(card_number)
 
-# API Secrets Regexes
-AWS_KEY_REGEX = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
-OPENAI_KEY_REGEX = re.compile(r"\bsk-[a-zA-Z0-9_\-]{20,}\b")
-GITHUB_TOKEN_REGEX = re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{36,}\b")
-SLACK_TOKEN_REGEX = re.compile(r"\bxox[baprs]-[0-9a-zA-Z\-]{10,}\b")
-PRIVATE_KEY_REGEX = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+def is_valid_email(email: str) -> bool:
+    if not email or not isinstance(email, str):
+        return False
+    return bool(EMAIL_REGEX.match(email.strip()))
 
-KNOWN_EMAIL_DOMAINS = {
-    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com",
-    "protonmail.com", "zoho.com", "aol.com", "mail.com", "gmx.com"
-}
+def mask_aadhaar(aadhaar: str) -> str:
+    digits = re.sub(r'\D', '', str(aadhaar))
+    if len(digits) == 12:
+        return f'XXXX-XXXX-{digits[-4:]}'
+    return 'XXXX-XXXX-XXXX'
 
+def mask_pan(pan: str) -> str:
+    clean = str(pan).strip().upper()
+    if len(clean) == 10:
+        return f'{clean[:2]}XXXXX{clean[-2:]}'
+    return 'XXXXXXXXXX'
 
-# -----------------------------------------------------------------------------
-# Data Models
-# -----------------------------------------------------------------------------
+def mask_gstin(gstin: str) -> str:
+    clean = str(gstin).strip().upper()
+    if len(clean) == 15:
+        return f'{clean[:2]}XXXXXXXXXXX{clean[-2:]}'
+    return 'XXXXXXXXXXXXXXX'
+
+def mask_credit_card(card: str) -> str:
+    digits = re.sub(r'\D', '', str(card))
+    if len(digits) >= 12:
+        return f'****-****-****-{digits[-4:]}'
+    return '****-****-****-****'
+
+def mask_email(email: str) -> str:
+    parts = str(email).split('@')
+    if len(parts) == 2:
+        user, domain = parts
+        masked_user = user[0] + '***' if len(user) > 1 else '***'
+        return f'{masked_user}@{domain}'
+    return '***@***.***'
+
+def mask_mobile(mobile: str) -> str:
+    digits = re.sub(r'\D', '', str(mobile))
+    if len(digits) >= 10:
+        return f'+91-XXXXX-{digits[-4:]}'
+    return '+91-XXXXX-XXXXX'
+
 class PIIDetection(BaseModel):
     entity_type: str
     subtype: str
     raw_value: str
     masked_value: str
     confidence: float
-    start: int = 0
-    end: int = 0
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    start: int
+    end: int
+    is_valid_checksum: bool = True
 
+class PIIScanResult(BaseModel):
+    has_pii: bool
+    has_secrets: bool
+    detections: List[PIIDetection] = []
+    scanned_length: int = 0
+    pii_count: int = 0
+    secret_count: int = 0
 
-# -----------------------------------------------------------------------------
-# Checksum Validation Functions
-# -----------------------------------------------------------------------------
-def is_valid_verhoeff(number_str: str) -> bool:
-    """
-    Validates a number string using the Verhoeff dihedral group D5 algorithm.
-    Returns True if valid, False otherwise.
-    """
-    clean_digits = re.sub(r"\D", "", number_str)
-    if not clean_digits:
-        return False
-    c = 0
-    for i, digit in enumerate(reversed([int(d) for d in clean_digits])):
-        c = VERHOEFF_D[c][VERHOEFF_P[i % 8][digit]]
-    return c == 0
-
-
-def generate_verhoeff_check_digit(number_str: str) -> int:
-    """Generates the single Verhoeff check digit for an n-digit string."""
-    clean_digits = re.sub(r"\D", "", number_str)
-    c = 0
-    for i, digit in enumerate(reversed([int(d) for d in clean_digits]), start=1):
-        c = VERHOEFF_D[c][VERHOEFF_P[i % 8][digit]]
-    return VERHOEFF_INV[c]
-
-
-def is_valid_aadhaar(aadhaar_str: str) -> bool:
-    """
-    Validates a 12-digit Indian Aadhaar number.
-    Must start with digits 2-9, not be all identical digits, and pass the Verhoeff D5 checksum.
-    """
-    clean = re.sub(r"[\s\-]", "", aadhaar_str.strip())
-    if len(clean) != 12 or not clean.isdigit():
-        return False
-    if clean[0] in ("0", "1"):
-        return False  # Aadhaar never starts with 0 or 1
-    if len(set(clean)) == 1:
-        return False  # UIDAI: 12 repeating identical digits (e.g. 999999999999) are invalid
-    return is_valid_verhoeff(clean)
-
-
-def is_valid_pan(pan_str: str) -> bool:
-    """
-    Validates a 10-character Indian Permanent Account Number.
-    Format: 5 letters, 4 digits, 1 letter.
-    4th character must match legitimate entity status codes.
-    """
-    clean = pan_str.strip().upper()
-    if len(clean) != 10:
-        return False
-    match = PAN_REGEX.fullmatch(clean)
-    if not match:
-        return False
-    # 4th character validation (entity status)
-    status_char = clean[3]
-    return status_char in "ABCFGHLJPT"
-
-
-def is_valid_gstin(gstin_str: str) -> bool:
-    """
-    Validates a 15-character Indian GSTIN via regex and Modulo-36 checksum.
-    """
-    clean = gstin_str.strip().upper()
-    if len(clean) != 15:
-        return False
-    if not GSTIN_REGEX.fullmatch(clean):
-        return False
-
-    state_code = clean[:2]
-    if state_code not in GSTIN_STATE_CODES:
-        return False
-
-    pan_part = clean[2:12]
-    if not is_valid_pan(pan_part):
-        return False
-
-    if clean[13] != "Z":
-        return False
-
-    # Modulo-36 Checksum computation
-    total = 0
-    for i in range(14):
-        char = clean[i]
-        val = GSTIN_CHARS.index(char)
-        factor = 1 if (i % 2 == 0) else 2
-        product = val * factor
-        quotient = product // 36
-        remainder = product % 36
-        total += quotient + remainder
-
-    check_code = (36 - (total % 36)) % 36
-    expected_char = GSTIN_CHARS[check_code]
-    return clean[14] == expected_char
-
-
-def is_valid_ifsc(ifsc_str: str) -> bool:
-    """Validates an 11-character Indian Financial System Code."""
-    clean = ifsc_str.strip().upper()
-    if len(clean) != 11:
-        return False
-    return bool(IFSC_REGEX.fullmatch(clean))
-
-
-def is_valid_upi(upi_str: str) -> bool:
-    """Validates an Indian UPI VPA (excluding standard email domains)."""
-    clean = upi_str.strip().lower()
-    match = UPI_REGEX.fullmatch(clean)
-    if not match:
-        return False
-    handle = match.group(2)
-    # Reject standard web email domains
-    if f"{handle}.com" in KNOWN_EMAIL_DOMAINS or handle in KNOWN_EMAIL_DOMAINS:
-        return False
-    return True
-
-
-def is_valid_indian_mobile(mobile_str: str) -> bool:
-    """Validates a 10-digit Indian Mobile number starting with 6, 7, 8, or 9."""
-    clean = re.sub(r"[\s\-\+]", "", mobile_str.strip())
-    if clean.startswith("91") and len(clean) == 12:
-        clean = clean[2:]
-    elif clean.startswith("0") and len(clean) == 11:
-        clean = clean[1:]
-    if len(clean) != 10 or not clean.isdigit():
-        return False
-    return clean[0] in ("6", "7", "8", "9")
-
-
-def is_valid_luhn_credit_card(card_str: str) -> bool:
-    """
-    Validates a credit card number using the Luhn Modulo-10 checksum algorithm.
-    Valid length: 13 to 19 digits.
-    """
-    clean_digits = [int(d) for d in card_str if d.isdigit()]
-    if len(clean_digits) < 13 or len(clean_digits) > 19:
-        return False
-
-    checksum = 0
-    reverse_digits = clean_digits[::-1]
-    for i, d in enumerate(reverse_digits):
-        if i % 2 == 1:
-            doubled = d * 2
-            checksum += doubled - 9 if doubled > 9 else doubled
-        else:
-            checksum += d
-    return checksum % 10 == 0
-
-
-def is_valid_ssn(ssn_str: str) -> bool:
-    """Validates a US Social Security Number."""
-    clean = ssn_str.strip()
-    match = SSN_REGEX.fullmatch(clean)
-    if not match:
-        return False
-    area, group, serial = match.groups()
-    if area in ("000", "666") or area.startswith("9"):
-        return False
-    if group == "00" or serial == "0000":
-        return False
-    return True
-
-
-def is_valid_email(email_str: str) -> bool:
-    """Validates an RFC 5322 compatible email address."""
-    clean = email_str.strip()
-    return bool(EMAIL_REGEX.fullmatch(clean))
-
-
-# -----------------------------------------------------------------------------
-# Masking Helpers
-# -----------------------------------------------------------------------------
-def mask_aadhaar(val: str) -> str:
-    clean = re.sub(r"\D", "", val)
-    return f"XXXX-XXXX-{clean[-4:]}" if len(clean) == 12 else "[REDACTED_AADHAAR]"
-
-
-def mask_pan(val: str) -> str:
-    clean = val.strip().upper()
-    return f"{clean[:2]}XXXXX{clean[-2:]}" if len(clean) == 10 else "[REDACTED_PAN]"
-
-
-def mask_gstin(val: str) -> str:
-    clean = val.strip().upper()
-    return f"{clean[:2]}XXXXXXXXXX{clean[-3:]}" if len(clean) == 15 else "[REDACTED_GSTIN]"
-
-
-def mask_credit_card(val: str) -> str:
-    clean = re.sub(r"\D", "", val)
-    return f"****-****-****-{clean[-4:]}" if len(clean) >= 12 else "[REDACTED_CARD]"
-
-
-def mask_email(val: str) -> str:
-    parts = val.split("@")
-    if len(parts) == 2:
-        user, domain = parts
-        masked_user = (user[:2] + "***") if len(user) > 2 else "***"
-        return f"{masked_user}@{domain}"
-    return "[REDACTED_EMAIL]"
-
-
-def mask_mobile(val: str) -> str:
-    clean = re.sub(r"\D", "", val)
-    return f"+91-XXXXXX{clean[-4:]}" if len(clean) >= 10 else "[REDACTED_PHONE]"
-
-
-# -----------------------------------------------------------------------------
-# Central Classification & Scanning Engine
-# -----------------------------------------------------------------------------
 class PIIClassifier:
-    """
-    High-performance, checksum-verified PII classifier for Indian DPDP 2025
-    and global privacy standards.
-    """
-
-    def classify_value(self, value: Any) -> Optional[PIIDetection]:
-        """Classifies a single standalone string/value as a PII entity or None."""
-        if not value or not isinstance(value, str):
-            return None
-        val_str = value.strip()
-        if len(val_str) < 3 or len(val_str) > 500:
-            return None
-
-        # 1. API Keys & Secrets
-        if AWS_KEY_REGEX.fullmatch(val_str):
-            return PIIDetection(
-                entity_type="SECRET",
-                subtype="AWS_ACCESS_KEY",
-                raw_value=val_str,
-                masked_value="AKIA****************",
-                confidence=1.0
-            )
-        if OPENAI_KEY_REGEX.fullmatch(val_str):
-            return PIIDetection(
-                entity_type="SECRET",
-                subtype="OPENAI_API_KEY",
-                raw_value=val_str,
-                masked_value="sk-********************",
-                confidence=1.0
-            )
-        if GITHUB_TOKEN_REGEX.fullmatch(val_str):
-            return PIIDetection(
-                entity_type="SECRET",
-                subtype="GITHUB_TOKEN",
-                raw_value=val_str,
-                masked_value="ghp_********************",
-                confidence=1.0
-            )
-
-        # 2. Aadhaar (Verhoeff Checksum)
-        if is_valid_aadhaar(val_str):
-            return PIIDetection(
-                entity_type="INDIAN_PII",
-                subtype="AADHAAR",
-                raw_value=val_str,
-                masked_value=mask_aadhaar(val_str),
-                confidence=0.99,
-                metadata={"checksum": "verhoeff_d5_valid"}
-            )
-
-        # 3. PAN (Entity Type Validated)
-        if is_valid_pan(val_str):
-            return PIIDetection(
-                entity_type="INDIAN_PII",
-                subtype="PAN",
-                raw_value=val_str,
-                masked_value=mask_pan(val_str),
-                confidence=0.98,
-                metadata={"entity_type": val_str[3]}
-            )
-
-        # 4. GSTIN (Modulo-36 Validated)
-        if is_valid_gstin(val_str):
-            return PIIDetection(
-                entity_type="INDIAN_PII",
-                subtype="GSTIN",
-                raw_value=val_str,
-                masked_value=mask_gstin(val_str),
-                confidence=0.99,
-                metadata={"state_code": val_str[:2], "pan": val_str[2:12]}
-            )
-
-        # 5. IFSC
-        if is_valid_ifsc(val_str):
-            return PIIDetection(
-                entity_type="INDIAN_PII",
-                subtype="IFSC",
-                raw_value=val_str,
-                masked_value=f"{val_str[:4]}0******",
-                confidence=0.95
-            )
-
-        # 6. Credit Card (Luhn Validated)
-        if is_valid_luhn_credit_card(val_str):
-            return PIIDetection(
-                entity_type="PAYMENT_PII",
-                subtype="CREDIT_CARD",
-                raw_value=val_str,
-                masked_value=mask_credit_card(val_str),
-                confidence=0.99,
-                metadata={"checksum": "luhn_mod10_valid"}
-            )
-
-        # 7. UPI VPA
-        if is_valid_upi(val_str):
-            return PIIDetection(
-                entity_type="PAYMENT_PII",
-                subtype="UPI_VPA",
-                raw_value=val_str,
-                masked_value=f"{val_str[:2]}***@{val_str.split('@')[-1]}",
-                confidence=0.95
-            )
-
-        # 8. Email
-        if is_valid_email(val_str):
-            return PIIDetection(
-                entity_type="CONTACT_PII",
-                subtype="EMAIL",
-                raw_value=val_str,
-                masked_value=mask_email(val_str),
-                confidence=0.95
-            )
-
-        # 9. Indian Mobile
-        if is_valid_indian_mobile(val_str):
-            return PIIDetection(
-                entity_type="CONTACT_PII",
-                subtype="INDIAN_MOBILE",
-                raw_value=val_str,
-                masked_value=mask_mobile(val_str),
-                confidence=0.90
-            )
-
-        # 10. US SSN
-        if is_valid_ssn(val_str):
-            return PIIDetection(
-                entity_type="GLOBAL_PII",
-                subtype="US_SSN",
-                raw_value=val_str,
-                masked_value="***-**-" + val_str.replace("-", "")[-4:],
-                confidence=0.95
-            )
-
-        return None
+    def classify_value(self, val: Any) -> Optional[PIIDetection]:
+        detections = self.scan_text(str(val))
+        return detections[0] if detections else None
 
     def scan_text(self, text: str) -> List[PIIDetection]:
-        """
-        Scans an arbitrary text block or prompt for embedded PII entities.
-        Returns all verified PII entities sorted by start index.
-        """
-        if not text or not isinstance(text, str):
-            return []
-
-        detections: List[PIIDetection] = []
-
-        # Scan for API Secrets
-        for match in AWS_KEY_REGEX.finditer(text):
-            detections.append(PIIDetection(
-                entity_type="SECRET",
-                subtype="AWS_ACCESS_KEY",
-                raw_value=match.group(0),
-                masked_value="AKIA****************",
-                confidence=1.0,
-                start=match.start(),
-                end=match.end()
-            ))
-
-        for match in OPENAI_KEY_REGEX.finditer(text):
-            detections.append(PIIDetection(
-                entity_type="SECRET",
-                subtype="OPENAI_API_KEY",
-                raw_value=match.group(0),
-                masked_value="sk-********************",
-                confidence=1.0,
-                start=match.start(),
-                end=match.end()
-            ))
-
-        for match in GITHUB_TOKEN_REGEX.finditer(text):
-            detections.append(PIIDetection(
-                entity_type="SECRET",
-                subtype="GITHUB_TOKEN",
-                raw_value=match.group(0),
-                masked_value="ghp_********************",
-                confidence=1.0,
-                start=match.start(),
-                end=match.end()
-            ))
-
-        # Scan for Aadhaar (with Verhoeff Checksum Verification)
-        for match in AADHAAR_REGEX.finditer(text):
-            raw = match.group(0)
-            if is_valid_aadhaar(raw):
-                detections.append(PIIDetection(
-                    entity_type="INDIAN_PII",
-                    subtype="AADHAAR",
-                    raw_value=raw,
-                    masked_value=mask_aadhaar(raw),
-                    confidence=0.99,
-                    start=match.start(),
-                    end=match.end(),
-                    metadata={"checksum": "verhoeff_d5_valid"}
-                ))
-
-        # Scan for PAN
-        for match in PAN_REGEX.finditer(text):
-            raw = match.group(0)
-            if is_valid_pan(raw):
-                detections.append(PIIDetection(
-                    entity_type="INDIAN_PII",
-                    subtype="PAN",
-                    raw_value=raw,
-                    masked_value=mask_pan(raw),
-                    confidence=0.98,
-                    start=match.start(),
-                    end=match.end(),
-                    metadata={"entity_type": raw[3]}
-                ))
-
-        # Scan for GSTIN
-        for match in GSTIN_REGEX.finditer(text):
-            raw = match.group(0)
-            if is_valid_gstin(raw):
-                detections.append(PIIDetection(
-                    entity_type="INDIAN_PII",
-                    subtype="GSTIN",
-                    raw_value=raw,
-                    masked_value=mask_gstin(raw),
-                    confidence=0.99,
-                    start=match.start(),
-                    end=match.end()
-                ))
-
-        # Scan for Credit Cards (with Luhn Verification)
-        for match in CREDIT_CARD_REGEX.finditer(text):
-            raw = match.group(0)
-            if is_valid_luhn_credit_card(raw):
-                detections.append(PIIDetection(
-                    entity_type="PAYMENT_PII",
-                    subtype="CREDIT_CARD",
-                    raw_value=raw,
-                    masked_value=mask_credit_card(raw),
-                    confidence=0.99,
-                    start=match.start(),
-                    end=match.end()
-                ))
-
-        # Scan for Emails
-        for match in EMAIL_REGEX.finditer(text):
-            raw = match.group(0)
-            detections.append(PIIDetection(
-                entity_type="CONTACT_PII",
-                subtype="EMAIL",
+        res = scan_text(text)
+        out = []
+        for d in res.get('detections', []):
+            raw = d.get('value', '')
+            subtype = d.get('subtype', '')
+            masked = raw
+            if subtype == 'AADHAAR':
+                masked = mask_aadhaar(raw)
+            elif subtype == 'PAN':
+                masked = mask_pan(raw)
+            elif subtype == 'GSTIN':
+                masked = mask_gstin(raw)
+            elif subtype == 'CREDIT_CARD':
+                masked = mask_credit_card(raw)
+            elif subtype == 'EMAIL':
+                masked = mask_email(raw)
+            elif subtype in ('PHONE', 'INDIAN_MOBILE'):
+                masked = mask_mobile(raw)
+            else:
+                masked = f'[REDACTED_{subtype}]'
+            out.append(PIIDetection(
+                entity_type=d.get('type', 'PII'),
+                subtype=subtype,
                 raw_value=raw,
-                masked_value=mask_email(raw),
-                confidence=0.95,
-                start=match.start(),
-                end=match.end()
+                masked_value=masked,
+                confidence=1.0,
+                start=d.get('start', 0),
+                end=d.get('end', len(raw)),
+                is_valid_checksum=True
             ))
-
-        # Scan for UPI VPA
-        for match in UPI_REGEX.finditer(text):
-            raw = match.group(0)
-            if is_valid_upi(raw):
-                # Ensure it wasn't already tagged as an email
-                if not any(d.subtype == "EMAIL" and d.start == match.start() for d in detections):
-                    detections.append(PIIDetection(
-                        entity_type="PAYMENT_PII",
-                        subtype="UPI_VPA",
-                        raw_value=raw,
-                        masked_value=f"{raw[:2]}***@{raw.split('@')[-1]}",
-                        confidence=0.95,
-                        start=match.start(),
-                        end=match.end()
-                    ))
-
-        # Scan for Indian Mobile
-        for match in INDIAN_MOBILE_REGEX.finditer(text):
-            raw = match.group(0)
-            if is_valid_indian_mobile(raw):
-                # Ensure not part of a larger number or credit card
-                if not any(d.start <= match.start() and match.end() <= d.end for d in detections):
-                    detections.append(PIIDetection(
-                        entity_type="CONTACT_PII",
-                        subtype="INDIAN_MOBILE",
-                        raw_value=raw,
-                        masked_value=mask_mobile(raw),
-                        confidence=0.90,
-                        start=match.start(),
-                        end=match.end()
-                    ))
-
-        # Scan for US SSN
-        for match in SSN_REGEX.finditer(text):
-            raw = match.group(0)
-            if is_valid_ssn(raw):
-                if not any(d.start <= match.start() and match.end() <= d.end for d in detections):
-                    detections.append(PIIDetection(
-                        entity_type="GLOBAL_PII",
-                        subtype="US_SSN",
-                        raw_value=raw,
-                        masked_value="***-**-" + raw.replace("-", "")[-4:],
-                        confidence=0.95,
-                        start=match.start(),
-                        end=match.end()
-                    ))
-
-        # Sort detections by start position descending to facilitate clean masking
-        detections.sort(key=lambda d: d.start)
-        return detections
+        return out
 
     def redact_text(self, text: str) -> str:
-        """Replaces all detected PII in text with their privacy-safe masked representations."""
         detections = self.scan_text(text)
-        if not detections:
-            return text
-
-        # Replace from right to left so indices don't shift
-        sanitized = text
+        res = text
         for d in sorted(detections, key=lambda x: x.start, reverse=True):
-            sanitized = sanitized[:d.start] + d.masked_value + sanitized[d.end:]
-        return sanitized
+            res = res[:d.start] + d.masked_value + res[d.end:]
+        return res
 
-
-# Global Singleton Instance
-pii_classifier = PIIClassifier()
-
+_GLOBAL_PII_CLASSIFIER = None
 
 def get_pii_classifier() -> PIIClassifier:
-    """Convenience getter for singleton PIIClassifier."""
-    return pii_classifier
+    global _GLOBAL_PII_CLASSIFIER
+    if _GLOBAL_PII_CLASSIFIER is None:
+        _GLOBAL_PII_CLASSIFIER = PIIClassifier()
+    return _GLOBAL_PII_CLASSIFIER
+
+def redact_text(text: str) -> str:
+    return get_pii_classifier().redact_text(text)
+
+def classify_value(val: Any) -> Optional[str]:
+    s = str(val).strip()
+    if not s:
+        return None
+    res = scan_text(s)
+    if res['detections']:
+        return res['detections'][0]['subtype']
+    return None

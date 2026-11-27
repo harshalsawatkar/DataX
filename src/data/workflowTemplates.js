@@ -124,21 +124,21 @@ export const TEMPLATE_AUTOFILLS = {
     ],
     sourceConfig: {
       engine: 'sap_bw',
-      host: 'hana.corp.ondemand.com',
+      host: '',
       port: '443',
       database: 'SAP_BW',
-      user: 'bwp_rfc_user',
-      password: '••••••••',
+      user: '',
+      password: '',
       table: '0PUR_C01',
-      connectionUri: 'jdbc:sap://hana.corp.ondemand.com:443?encrypt=true&validateCertificate=false&user=bwp_rfc_user&databaseName=SAP_BW'
+      connectionUri: ''
     },
     targetConfig: {
       engine: 's4_hana',
-      host: 's4h.corp.ondemand.com',
+      host: '',
       port: '443',
       database: 'S4HANA_PRD',
-      user: 'bapi_comm_user',
-      password: '••••••••',
+      user: '',
+      password: '',
       table: '0PUR_C01_clean',
       quarantineTable: '0PUR_C01_quarantine',
       writeMode: 'append',
@@ -276,9 +276,9 @@ export const TEMPLATE_AUTOFILLS = {
       port: '5432',
       database: 'erp_finance',
       user: 'sox_audit_user',
-      password: '••••••••',
+      password: '',
       table: 'gl_journal_entries',
-      connectionUri: 'postgresql://sox_audit_user:••••••••@pg-finance.internal.net:5432/erp_finance?sslmode=require'
+      connectionUri: 'postgresql://pg-finance.internal.net:5432/erp_finance?sslmode=require'
     },
     targetConfig: {
       engine: 'bigquery',
@@ -286,7 +286,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'enterprise_analytics_landing',
       user: 'datax_svc@gcp.iam.gserviceaccount.com',
-      password: '••••••••',
+      password: '',
       table: 'gl_ledger_audited_gold',
       quarantineTable: 'gl_suspense_quarantine',
       writeMode: 'append',
@@ -406,9 +406,9 @@ export const TEMPLATE_AUTOFILLS = {
       port: '27017',
       database: 'crm_master',
       user: 'atlas_admin',
-      password: '••••••••',
+      password: '',
       table: 'customers_raw',
-      connectionUri: 'mongodb+srv://atlas_admin:••••••••@atlas-cluster0.mongodb.net/crm_master?retryWrites=true&w=majority'
+      connectionUri: 'mongodb+srv://atlas-cluster0.mongodb.net/crm_master?retryWrites=true&w=majority'
     },
     targetConfig: {
       engine: 'postgres',
@@ -416,11 +416,11 @@ export const TEMPLATE_AUTOFILLS = {
       port: '5432',
       database: 'reconciled_db',
       user: 'postgres_admin',
-      password: '••••••••',
+      password: '',
       table: 'customers_gold',
       quarantineTable: 'customers_unresolved',
       writeMode: 'append',
-      connectionUri: 'postgresql://postgres_admin:••••••••@pg-reconciled.internal.net:5432/reconciled_db?sslmode=require'
+      connectionUri: 'postgresql://pg-reconciled.internal.net:5432/reconciled_db?sslmode=require'
     },
     rules: [
       { id: 'r_cm_1', name: 'RFC-5322 Email Syntax', field: 'email', severity: 'Critical', code: "REGEX_MATCH(email, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$')", selected: true, desc: 'Valid corporate email syntax' },
@@ -550,7 +550,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'Parquet Snappy',
       user: 's3_contract_reader',
-      password: '••••••••',
+      password: '',
       table: 'vendor_contracts_q1',
       connectionUri: 's3://datax-enterprise-lake/legal-contracts/vendor_contracts_q1.parquet'
     },
@@ -560,7 +560,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'enterprise-knowledge-base',
       user: 'pinecone_svc',
-      password: '••••••••',
+      password: '',
       table: 'enterprise-knowledge-base',
       quarantineTable: 'contracts_policy_violations',
       writeMode: 'append',
@@ -685,7 +685,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'credit_risk_lakehouse',
       user: 'ml_feature_store',
-      password: '••••••••',
+      password: '',
       table: 'credit_risk_candidate_q2',
       connectionUri: 's3://datax-ml-lake/features/candidate_q2.parquet'
     },
@@ -695,7 +695,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'certified_training_pool',
       user: 'mlops_pipeline',
-      password: '••••••••',
+      password: '',
       table: 'certified_training_data',
       quarantineTable: 'ml_drift_quarantine',
       writeMode: 'append',
@@ -829,7 +829,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'Salesforce CRM Enterprise',
       user: 'sfdc_api_user@enterprise.com',
-      password: '••••••••',
+      password: '',
       table: 'Opportunity',
       connectionUri: 'https://login.salesforce.com/services/oauth2/token'
     },
@@ -839,7 +839,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'revops_analytics',
       user: 'datax_svc@gcp.iam.gserviceaccount.com',
-      password: '••••••••',
+      password: '',
       table: 'sales_pipeline_gold',
       quarantineTable: 'salesforce_junk_quarantine',
       writeMode: 'append',
@@ -959,7 +959,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: 'telemetry-container',
       database: 'Azure Blob Snappy',
       user: 'azure_telemetry_client',
-      password: '••••••••',
+      password: '',
       table: 'telemetry_logs.parquet',
       connectionUri: 'https://azure-storage.blob.core.windows.net/telemetry-container/telemetry_logs.parquet'
     },
@@ -969,7 +969,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'incident-embeddings',
       user: 'pinecone_svc',
-      password: '••••••••',
+      password: '',
       table: 'incident-embeddings',
       quarantineTable: 'corrupt_telemetry_dlq',
       writeMode: 'append',
@@ -1090,9 +1090,9 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'ANALYTICS_LANDING',
       user: 'datax_svc',
-      password: '••••••••',
+      password: '',
       table: 'PURCHASING_STAGE',
-      connectionUri: 'snowflake://datax_svc:••••••••@xy12345.us-east-1.snowflakecomputing.com/ANALYTICS_LANDING?warehouse=COMPUTE_WH'
+      connectionUri: 'snowflake://xy12345.us-east-1.snowflakecomputing.com/ANALYTICS_LANDING?warehouse=COMPUTE_WH'
     },
     targetConfig: {
       engine: 's4_hana',
@@ -1100,7 +1100,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'S4HANA_PRD',
       user: 'bapi_comm_user',
-      password: '••••••••',
+      password: '',
       table: '0PUR_C01_reconciled',
       quarantineTable: 'procurement_maverick_dlq',
       writeMode: 'append',
@@ -1238,7 +1238,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'Parquet Snappy',
       user: 's3_wms_agent',
-      password: '••••••••',
+      password: '',
       table: 'inventory_levels.parquet',
       connectionUri: 's3://datax-enterprise-lake/wms-telemetry/inventory_levels.parquet'
     },
@@ -1248,7 +1248,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'S4HANA_PRD',
       user: 'bapi_comm_user',
-      password: '••••••••',
+      password: '',
       table: 'inventory_reconciled_gold',
       quarantineTable: 'inventory_variance_dlq',
       writeMode: 'append',
@@ -1385,9 +1385,9 @@ export const TEMPLATE_AUTOFILLS = {
       port: '5432',
       database: 'clinical_raw',
       user: 'ehr_sync_agent',
-      password: '••••••••',
+      password: '',
       table: 'patients_clinical_raw',
-      connectionUri: 'postgresql://ehr_sync_agent:••••••••@hipaa-vault.internal.net:5432/clinical_raw?sslmode=require'
+      connectionUri: 'postgresql://hipaa-vault.internal.net:5432/clinical_raw?sslmode=require'
     },
     targetConfig: {
       engine: 'bigquery',
@@ -1395,7 +1395,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'clinical_warehouse',
       user: 'datax_svc@gcp.iam.gserviceaccount.com',
-      password: '••••••••',
+      password: '',
       table: 'patients_clean_gold',
       quarantineTable: 'patients_breach_quarantine',
       writeMode: 'append',
@@ -1502,7 +1502,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: 'telemetry-container',
       database: 'Azure Blob Snappy',
       user: 'azure_telemetry_client',
-      password: '••••••••',
+      password: '',
       table: 'raw_events_stream.parquet',
       connectionUri: 'https://azure-storage.blob.core.windows.net/telemetry-container/raw_events_stream.parquet'
     },
@@ -1512,7 +1512,7 @@ export const TEMPLATE_AUTOFILLS = {
       port: '443',
       database: 'enterprise_events',
       user: 'datax_svc@gcp.iam.gserviceaccount.com',
-      password: '••••••••',
+      password: '',
       table: 'enterprise_events_clean',
       quarantineTable: 'events_corrupt_dlq',
       writeMode: 'append',

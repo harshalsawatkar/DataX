@@ -95,28 +95,36 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             else:
                 s_val = str(val).strip()
                 unique_values[col].add(s_val)
-                col_lower = col.lower()
-                try:
-                    try:
-                        from core.pii_classifier import get_pii_classifier
-                    except ImportError:
-                        from pii_classifier import get_pii_classifier
-                    pii_det = get_pii_classifier().classify_value(s_val)
-                except Exception:
-                    pii_det = None
-
-                if pii_det:
-                    detected_pii.append({"column": col, "type": pii_det.subtype, "sample": pii_det.masked_value})
-                elif "ssn" in col_lower or SSN_REGEX.match(s_val):
-                    detected_pii.append({"column": col, "type": "SSN", "sample": "***-**-****"})
-                elif "card" in col_lower or CC_REGEX.match(s_val):
-                    detected_pii.append({"column": col, "type": "CREDIT_CARD", "sample": "****-****-****-****"})
-
                 try:
                     num_val = float(val)
                     numeric_values[col].append(num_val)
                 except (ValueError, TypeError):
                     pass
+
+    # Scan complete columns with scan_column for PII and sensitive column names
+    try:
+        try:
+            from core.pii_classifier import scan_column
+        except ImportError:
+            from pii_classifier import scan_column
+        for col in all_cols:
+            col_vals = [row.get(col) for row in records]
+            scan_result = scan_column(col_vals, col)
+            for detection in scan_result.get("detections", []):
+                subtype = detection.get("subtype", "")
+                if detection.get("type") not in {"PII", "SECRET"}:
+                    continue
+                sample = {
+                    "SSN": "***-**-****",
+                    "CREDIT_CARD": "****-****-****-****",
+                }.get(subtype, "[REDACTED]")
+                detected_pii.append({
+                    "column": col,
+                    "type": subtype,
+                    "sample": sample,
+                })
+    except Exception:
+        pass
 
     null_ratios = {col: round(null_counts[col] / row_count, 4) for col in all_cols}
     avg_null_ratio = sum(null_ratios.values()) / max(1, column_count)

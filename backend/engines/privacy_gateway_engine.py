@@ -24,51 +24,21 @@ import requests
 
 from db_config import get_storage_connection, get_storage_uri
 from ai_firewall_engine import (
-    SECRET_PATTERNS,
-    SSN_REGEX,
-    CREDIT_CARD_REGEX,
-    EMAIL_REGEX,
-    PHONE_REGEX,
     PROMPT_INJECTION_PATTERNS,
     calculate_shannon_entropy
 )
-
-try:
-    from core.pii_classifier import (
-        get_pii_classifier,
-        generate_verhoeff_check_digit,
-        GSTIN_CHARS,
-        is_valid_aadhaar,
-        is_valid_pan,
-        is_valid_gstin,
-    )
-except ImportError:
-    from pii_classifier import (
-        get_pii_classifier,
-        generate_verhoeff_check_digit,
-        GSTIN_CHARS,
-        is_valid_aadhaar,
-        is_valid_pan,
-        is_valid_gstin,
-    )
-
-# -----------------------------------------------------------------------------
-# Luhn Algorithm for Credit Card Validation
-# -----------------------------------------------------------------------------
-def is_valid_luhn(card_number: str) -> bool:
-    """Validates credit card numbers with the Luhn checksum algorithm."""
-    digits = [int(d) for d in str(card_number) if d.isdigit()]
-    if len(digits) < 13 or len(digits) > 19:
-        return False
-    checksum = 0
-    reverse_digits = digits[::-1]
-    for i, d in enumerate(reverse_digits):
-        if i % 2 == 1:
-            doubled = d * 2
-            checksum += doubled - 9 if doubled > 9 else doubled
-        else:
-            checksum += d
-    return checksum % 10 == 0
+from core.pii_classifier import (
+    CREDIT_CARD_REGEX,
+    EMAIL_REGEX,
+    PHONE_REGEX,
+    SECRET_PATTERNS,
+    SSN_REGEX,
+    generate_synthetic_aadhaar,
+    generate_synthetic_gstin,
+    generate_synthetic_pan,
+    is_valid_luhn,
+    scan_text,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -130,56 +100,6 @@ def generate_synthetic_phone(original_phone: str, seed: str) -> str:
     return f"+1-555-01{fictional_suffix}"
 
 
-def generate_synthetic_aadhaar(original_aadhaar: str, seed: str) -> str:
-    """Generates a synthetic 12-digit Indian Aadhaar passing Verhoeff D5 checksum."""
-    h = hashlib.sha256(f"{seed}:aadhaar:{original_aadhaar}".encode("utf-8")).hexdigest()
-    first_digit = (int(h[0], 16) % 8) + 2
-    remaining_10 = f"{int(h[1:13], 16) % 10000000000:010d}"
-    base_11 = f"{first_digit}{remaining_10}"
-    check = generate_verhoeff_check_digit(base_11)
-    clean_synth = f"{base_11}{check}"
-    if " " in original_aadhaar:
-        return f"{clean_synth[:4]} {clean_synth[4:8]} {clean_synth[8:]}"
-    elif "-" in original_aadhaar:
-        return f"{clean_synth[:4]}-{clean_synth[4:8]}-{clean_synth[8:]}"
-    return clean_synth
-
-
-def generate_synthetic_pan(original_pan: str, seed: str) -> str:
-    """Generates a synthetic 10-char PAN preserving 4th status char and 5th surname initial."""
-    h = hashlib.sha256(f"{seed}:pan:{original_pan}".encode("utf-8")).hexdigest()
-    clean = original_pan.strip().upper()
-    c1 = chr(ord('A') + (int(h[0:2], 16) % 26))
-    c2 = chr(ord('A') + (int(h[2:4], 16) % 26))
-    c3 = chr(ord('A') + (int(h[4:6], 16) % 26))
-    status_char = clean[3] if len(clean) >= 4 and clean[3] in "ABCFGHLJPT" else "P"
-    initial_char = clean[4] if len(clean) >= 5 and clean[4].isalpha() else "X"
-    digits = f"{int(h[6:10], 16) % 9000 + 1000:04d}"
-    last_char = chr(ord('A') + (int(h[10:12], 16) % 26))
-    return f"{c1}{c2}{c3}{status_char}{initial_char}{digits}{last_char}"
-
-
-def generate_synthetic_gstin(original_gstin: str, seed: str) -> str:
-    """Generates a synthetic 15-char GSTIN preserving state code with valid Modulo-36 check."""
-    clean = original_gstin.strip().upper()
-    state = clean[:2] if len(clean) >= 2 and clean[:2].isdigit() else "29"
-    pan_part = clean[2:12] if len(clean) >= 12 else "ABCPE1234F"
-    synth_pan = generate_synthetic_pan(pan_part, seed)
-    entity_code = clean[12] if len(clean) >= 13 and clean[12].isalnum() else "1"
-    base_14 = f"{state}{synth_pan}{entity_code}Z"
-
-    total = 0
-    for i in range(14):
-        char = base_14[i]
-        val = GSTIN_CHARS.index(char)
-        factor = 1 if (i % 2 == 0) else 2
-        product = val * factor
-        total += (product // 36) + (product % 36)
-
-    check_char = GSTIN_CHARS[(36 - (total % 36)) % 36]
-    return f"{base_14}{check_char}"
-
-
 # -----------------------------------------------------------------------------
 # Reversible Token Vault (Task 9 & Task 28: AES-GCM Encrypted Local In-Memory Vault)
 # -----------------------------------------------------------------------------
@@ -235,7 +155,7 @@ class TokenVault:
                 return sess["reverse"][rev_key]
 
             if mode == "FORMAT_PRESERVING":
-                if entity_type in ("CARD", "CREDIT_CARD"):
+                if entity_type == "CARD":
                     synth = generate_synthetic_luhn_card(raw_value, session_id)
                 elif entity_type == "SSN":
                     synth = generate_synthetic_ssn(raw_value, session_id)
@@ -439,94 +359,60 @@ def anonymize_text(
     sanitized = text
 
     # 2. Secret & API Key Scrubber
-    for sec_name, pattern in SECRET_PATTERNS:
-        matches = list(pattern.finditer(sanitized))
-        for m in reversed(matches):
-            raw_val = m.group(0)
-            act = pol.get("action_secrets", "BLOCK")
-            detected_entities.append({"type": "SECRET", "subtype": sec_name, "action": act})
-            if act == "BLOCK":
-                raise SecurityViolationException(
-                    "SECRET_LEAK",
-                    f"Blocked sensitive credential in prompt ({sec_name}). Credentials must not be submitted to cloud LLMs.",
-                    risk_score=9.0
-                )
-            elif act == "MASK":
-                sanitized = sanitized[:m.start()] + "[SECRET_REDACTED]" + sanitized[m.end():]
-            elif act == "TOKENIZE":
-                token = tv.tokenize_entity(session_id, "SECRET", raw_val)
-                sanitized = sanitized[:m.start()] + token + sanitized[m.end():]
-
-    # 3. SSN Redaction
-    ssn_matches = list(SSN_REGEX.finditer(sanitized))
-    for m in reversed(ssn_matches):
-        raw_ssn = m.group(0)
-        act = pol.get("action_ssn_cards", "TOKENIZE")
-        detected_entities.append({"type": "PII", "subtype": "SSN", "action": act})
+    secret_detections = [
+        item for item in scan_text(sanitized)["detections"]
+        if item["type"] == "SECRET"
+    ]
+    for item in reversed(secret_detections):
+        sec_name = item["subtype"]
+        act = pol.get("action_secrets", "BLOCK")
+        detected_entities.append({"type": "SECRET", "subtype": sec_name, "action": act})
         if act == "BLOCK":
-            raise SecurityViolationException("PII_SSN", "Blocked Social Security Number in prompt.", risk_score=8.5)
+            raise SecurityViolationException(
+                "SECRET_LEAK",
+                f"Blocked sensitive credential in prompt ({sec_name}). Credentials must not be submitted to cloud LLMs.",
+                risk_score=9.0
+            )
         elif act == "MASK":
-            sanitized = sanitized[:m.start()] + "[SSN_REDACTED]" + sanitized[m.end():]
+            replacement = "[SECRET_REDACTED]"
         elif act == "TOKENIZE":
-            token = tv.tokenize_entity(session_id, "SSN", raw_ssn, mode=mode)
-            sanitized = sanitized[:m.start()] + token + sanitized[m.end():]
+            replacement = tv.tokenize_entity(session_id, "SECRET", item["value"])
+        else:
+            continue
+        sanitized = sanitized[:item["start"]] + replacement + sanitized[item["end"]:]
 
-    # 4. Credit Card Redaction (with Luhn check to prevent false positives)
-    card_matches = list(CREDIT_CARD_REGEX.finditer(sanitized))
-    for m in reversed(card_matches):
-        raw_card = m.group(0)
-        clean_num = re.sub(r"\D", "", raw_card)
-        if is_valid_luhn(clean_num):
-            act = pol.get("action_ssn_cards", "TOKENIZE")
-            detected_entities.append({"type": "PII", "subtype": "CREDIT_CARD", "action": act})
-            if act == "BLOCK":
-                raise SecurityViolationException("PII_CREDIT_CARD", "Blocked Credit Card number in prompt.", risk_score=8.5)
-            elif act == "MASK":
-                sanitized = sanitized[:m.start()] + "[CARD_REDACTED]" + sanitized[m.end():]
-            elif act == "TOKENIZE":
-                token = tv.tokenize_entity(session_id, "CARD", raw_card, mode=mode)
-                sanitized = sanitized[:m.start()] + token + sanitized[m.end():]
-
-    # 5. Email Redaction
-    email_matches = list(EMAIL_REGEX.finditer(sanitized))
-    for m in reversed(email_matches):
-        raw_email = m.group(0)
-        act = pol.get("action_emails_phones", "TOKENIZE")
-        detected_entities.append({"type": "PII", "subtype": "EMAIL", "action": act})
+    pii_detections = [
+        item for item in scan_text(sanitized)["detections"]
+        if item["type"] == "PII"
+    ]
+    contact_subtypes = {"EMAIL", "PHONE", "INDIAN_MOBILE"}
+    for item in reversed(pii_detections):
+        subtype = item["subtype"]
+        policy_key = "action_emails_phones" if subtype in contact_subtypes else "action_ssn_cards"
+        act = pol.get(policy_key, "TOKENIZE")
+        detected_entities.append({"type": "PII", "subtype": subtype, "action": act})
+        if act == "BLOCK":
+            raise SecurityViolationException(
+                f"PII_{subtype}",
+                f"Blocked {subtype.replace('_', ' ').lower()} in prompt.",
+                risk_score=8.5
+            )
         if act == "MASK":
-            sanitized = sanitized[:m.start()] + "[EMAIL_REDACTED]" + sanitized[m.end():]
+            replacement = f"[{subtype}_REDACTED]"
         elif act == "TOKENIZE":
-            token = tv.tokenize_entity(session_id, "EMAIL", raw_email, mode=mode)
-            sanitized = sanitized[:m.start()] + token + sanitized[m.end():]
-
-    # 6. Phone Number Redaction
-    phone_matches = list(PHONE_REGEX.finditer(sanitized))
-    for m in reversed(phone_matches):
-        raw_phone = m.group(0)
-        # Avoid short strings
-        if len(re.sub(r"\D", "", raw_phone)) >= 10:
-            act = pol.get("action_emails_phones", "TOKENIZE")
-            detected_entities.append({"type": "PII", "subtype": "PHONE", "action": act})
-            if act == "MASK":
-                sanitized = sanitized[:m.start()] + "[PHONE_REDACTED]" + sanitized[m.end():]
-            elif act == "TOKENIZE":
-                token = tv.tokenize_entity(session_id, "PHONE", raw_phone, mode=mode)
-                sanitized = sanitized[:m.start()] + token + sanitized[m.end():]
-
-    # 7. Indian DPDP PII Scanner (Aadhaar, PAN, GSTIN, UPI)
-    pii_clf = get_pii_classifier()
-    indian_detections = pii_clf.scan_text(sanitized)
-    for d in sorted(indian_detections, key=lambda x: x.start, reverse=True):
-        if d.subtype in ("AADHAAR", "PAN", "GSTIN", "UPI_VPA"):
-            act = pol.get("action_indian_pii", "TOKENIZE")
-            detected_entities.append({"type": d.entity_type, "subtype": d.subtype, "action": act})
-            if act == "BLOCK":
-                raise SecurityViolationException(f"PII_{d.subtype}", f"Blocked {d.subtype} in prompt.", risk_score=8.5)
-            elif act == "MASK":
-                sanitized = sanitized[:d.start] + d.masked_value + sanitized[d.end:]
-            elif act == "TOKENIZE":
-                token = tv.tokenize_entity(session_id, d.subtype, d.raw_value, mode=mode)
-                sanitized = sanitized[:d.start] + token + sanitized[d.end:]
+            entity_type = {
+                "CREDIT_CARD": "CARD",
+                "INDIAN_MOBILE": "PHONE",
+            }.get(subtype, subtype)
+            replacement = tv.tokenize_entity(
+                session_id,
+                entity_type,
+                item["value"],
+                mode=mode,
+            )
+        else:
+            continue
+        sanitized = sanitized[:item["start"]] + replacement + sanitized[item["end"]:]
 
     return sanitized, detected_entities
 

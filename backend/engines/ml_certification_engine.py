@@ -20,12 +20,13 @@ from typing import Dict, Any, List, Optional, Tuple
 import psycopg2
 from db_config import get_storage_uri, get_storage_connection
 from vault import DEFAULT_NEON_URI
-from ai_firewall_engine import (
-    SECRET_PATTERNS,
-    SSN_REGEX,
+from core.pii_classifier import (
     CREDIT_CARD_REGEX,
     EMAIL_REGEX,
     PHONE_REGEX,
+    SECRET_PATTERNS,
+    SSN_REGEX,
+    scan_text,
 )
 
 
@@ -725,39 +726,46 @@ def _sanitize_sft_text(
 ) -> Tuple[str, List[str]]:
     out = text
     tags = []
-    if redact_secrets_pii:
-        for sec_name, pattern in SECRET_PATTERNS:
-            if pattern.search(out):
-                out = pattern.sub(f"[REDACTED_{sec_name}]", out)
-                tags.append(f"SECRET:{sec_name}")
-        if SSN_REGEX.search(out):
-            out = SSN_REGEX.sub("[REDACTED_SSN]", out)
-            tags.append("PII:SSN")
-        if CREDIT_CARD_REGEX.search(out):
-            out = CREDIT_CARD_REGEX.sub("[REDACTED_CARD]", out)
-            tags.append("PII:PAYMENT_CARD")
+    detections = scan_text(out)["detections"]
+    selected = []
+    for item in sorted(detections, key=lambda match: (match["start"], -(match["end"] - match["start"]))):
+        should_redact = (
+            item["type"] == "SECRET" and redact_secrets_pii
+        ) or (
+            item["type"] == "PII"
+            and (
+                redact_secrets_pii
+                or (redact_emails_phones and item["subtype"] in {"EMAIL", "PHONE", "INDIAN_MOBILE"})
+            )
+        )
+        if should_redact and not any(
+            item["start"] < existing["end"] and existing["start"] < item["end"]
+            for existing in selected
+        ):
+            selected.append(item)
 
-        # Indian DPDP PII Scanner
-        try:
-            try:
-                from core.pii_classifier import get_pii_classifier
-            except ImportError:
-                from pii_classifier import get_pii_classifier
-            clf = get_pii_classifier()
-            for d in clf.scan_text(out):
-                if d.subtype in ("AADHAAR", "PAN", "GSTIN"):
-                    out = out.replace(d.raw_value, f"[REDACTED_{d.subtype}]")
-                    tags.append(f"PII:{d.subtype}")
-        except Exception:
-            pass
-    if redact_emails_phones:
-        if EMAIL_REGEX.search(out):
-            out = EMAIL_REGEX.sub("[REDACTED_EMAIL]", out)
-            tags.append("PII:EMAIL")
-        if PHONE_REGEX.search(out):
-            out = PHONE_REGEX.sub("[REDACTED_PHONE]", out)
-            tags.append("PII:PHONE")
+    for item in reversed(selected):
+        subtype = item["subtype"]
+        if item["type"] == "SECRET":
+            replacement = f"[REDACTED_{subtype}]"
+            tag = f"SECRET:{subtype}"
+        else:
+            replacement = {
+                "SSN": "[REDACTED_SSN]",
+                "CREDIT_CARD": "[REDACTED_CARD]",
+                "EMAIL": "[REDACTED_EMAIL]",
+                "PHONE": "[REDACTED_PHONE]",
+                "INDIAN_MOBILE": "[REDACTED_PHONE]",
+            }.get(subtype, f"[REDACTED_{subtype}]")
+            tag = "PII:PAYMENT_CARD" if subtype == "CREDIT_CARD" else f"PII:{subtype}"
+        out = out[:item["start"]] + replacement + out[item["end"]:]
+        tags.append(tag)
     return out, tags
+
+
+def _safe_sft_preview(text: str, limit: int) -> str:
+    sanitized, _ = _sanitize_sft_text(text, True, True)
+    return sanitized[:limit]
 
 
 def certify_sft_jsonl_dataset(
@@ -916,8 +924,8 @@ def certify_sft_jsonl_dataset(
                     "recordIndex": idx,
                     "action": "REMOVED_DUPLICATE",
                     "issues": ["Exact duplicate normalized prompt"],
-                    "promptPreview": raw_prompt[:140],
-                    "completionPreview": raw_completion[:140],
+                    "promptPreview": _safe_sft_preview(raw_prompt, 140),
+                    "completionPreview": _safe_sft_preview(raw_completion, 140),
                 })
                 continue
             else:
@@ -928,29 +936,34 @@ def certify_sft_jsonl_dataset(
 
         # 4. Scan Remaining Unredacted Secrets & PII in Prompt + Completion
         combined_text = f"{prompt}\n{completion}"
-        for sec_name, pattern in SECRET_PATTERNS:
-            if pattern.search(combined_text):
+        for detection in scan_text(combined_text)["detections"]:
+            subtype = detection["subtype"]
+            if detection["type"] == "SECRET":
                 secret_leaks.append({
                     "recordIndex": idx,
-                    "secretType": sec_name,
-                    "snippet": completion[:90] + ("..." if len(completion) > 90 else "")
+                    "secretType": subtype,
+                    "snippet": "[REDACTED]",
                 })
-                row_issues.append(f"Unmasked Secret ({sec_name})")
-
-        if SSN_REGEX.search(combined_text):
-            pii_leaks.append({"recordIndex": idx, "piiType": "SSN", "snippet": completion[:90]})
-            row_issues.append("Unmasked SSN")
-        if CREDIT_CARD_REGEX.search(combined_text):
-            pii_leaks.append({"recordIndex": idx, "piiType": "PAYMENT_CARD", "snippet": completion[:90]})
-            row_issues.append("Unmasked Payment Card")
+                row_issues.append(f"Unmasked Secret ({subtype})")
+            elif detection["type"] == "PII":
+                pii_leaks.append({
+                    "recordIndex": idx,
+                    "piiType": subtype,
+                    "snippet": "[REDACTED]",
+                })
+                issue = {
+                    "SSN": "Unmasked SSN",
+                    "CREDIT_CARD": "Unmasked Payment Card",
+                }.get(subtype, f"Unmasked PII ({subtype})")
+                row_issues.append(issue)
 
         if row_issues and len(pair_diagnostics) < 120:
             pair_diagnostics.append({
                 "recordIndex": idx,
                 "action": "RETAINED_REDACTED" if "Auto-Redacted" in " ".join(row_issues) and len(row_issues) == 1 else "FLAGGED",
                 "issues": row_issues,
-                "promptPreview": prompt[:160],
-                "completionPreview": completion[:160],
+                "promptPreview": _safe_sft_preview(prompt, 160),
+                "completionPreview": _safe_sft_preview(completion, 160),
             })
 
         p_tok = max(1, len(prompt) // 4) if prompt else 0

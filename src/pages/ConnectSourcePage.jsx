@@ -55,6 +55,7 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
   const [tableSearch, setTableSearch] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testSuccess, setTestSuccess] = useState(false);
+  const [sandboxLoaded, setSandboxLoaded] = useState(Boolean(sourceConfig?.demoSandbox));
   const [testError, setTestError] = useState(null);
   const [validationError, setValidationError] = useState(null);
   const [testMeta, setTestMeta] = useState({ latencyMs: 0, tableCount: 0 });
@@ -144,6 +145,7 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
   };
 
   const handleTest = async () => {
+    setSandboxLoaded(false);
     setIsTesting(true);
     setTestError(null);
     setValidationError(null);
@@ -255,23 +257,47 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
     }
   };
 
-  const handleLoadDemoCredentials = () => {
-    setConnectMethod('string');
-    const demoUri = 'jdbc:sap://hana.corp.ondemand.com:443?encrypt=true&validateCertificate=false&user=DATAX_DEMO&database=SAP_BW';
-    setConnString(demoUri);
-    setHost('hana.corp.ondemand.com');
+  const handleLoadCertifiedSapSandbox = () => {
+    const catalog = getTableCatalog('sap_bw');
+    const table = catalog[0]?.name || '0PUR_C01';
+    const sample = getTableData(table, 'sap_bw', 5);
+    setSandboxLoaded(true);
+    setTestSuccess(false);
+    setTestError(null);
+    setConnString('');
+    setHost('');
     setPort('443');
-    setDatabaseName('SAP_BW');
-    setUsername('DATAX_DEMO');
-    setPassword('DemoPass2026!');
+    setDatabaseName('Certified SAP Sandbox');
+    setUsername('');
+    setPassword('');
+    setConnectMethod('host');
+    setAvailableTables(catalog);
+    setSelectedTables([table]);
+    setPreviewTable(table);
+    setPreviewRows(sample.rows);
     setValidationError(null);
+    setSourceConfig(prev => ({
+      ...prev,
+      engine: 'sap_bw',
+      demoSandbox: true,
+      connectionUri: '',
+      host: '',
+      port: '443',
+      database: 'Certified SAP Sandbox',
+      user: '',
+      password: '',
+      table,
+      availableTables: catalog.map(item => item.name),
+      discoveredColumns: sample.columns,
+      sampleRows: sample.rows,
+    }));
   };
 
   const handleToggleTable = async (tableName) => {
     setSelectedTables([tableName]);
     setPreviewTable(tableName);
 
-    // 1. Immediately render authentic table data for selected table
+    // Render local sample data while a live sample request is pending.
     const engineKey = dbType === 'SAP BW' ? 'sap_bw' : dbType === 'MongoDB' ? 'mongodb' : 'postgres';
     const localData = getTableData(tableName, engineKey, 5);
     setPreviewRows(localData.rows);
@@ -289,9 +315,11 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
       : (dbType === 'SAP BW' && host.trim())
       ? `jdbc:sap://${host.trim()}:${port || '443'}?encrypt=true&validateCertificate=false&user=${username || ''}&password=${password || ''}`
       : connString;
-    const sampleRes = await fetchTableSample(tableName, 5, effectiveUri);
-    if (sampleRes && sampleRes.rows && sampleRes.rows.length > 0) {
-      setPreviewRows(sampleRes.rows);
+    if (!sandboxLoaded) {
+      const sampleRes = await fetchTableSample(tableName, 5, effectiveUri);
+      if (sampleRes && sampleRes.rows && sampleRes.rows.length > 0) {
+        setPreviewRows(sampleRes.rows);
+      }
     }
   };
 
@@ -299,7 +327,7 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
     setSelectedTables([tableName]);
     setPreviewTable(tableName);
 
-    // 1. Immediately render authentic table data for selected table
+    // Render local sample data while a live sample request is pending.
     const engineKey = dbType === 'SAP BW' ? 'sap_bw' : dbType === 'MongoDB' ? 'mongodb' : 'postgres';
     const localData = getTableData(tableName, engineKey, 5);
     setPreviewRows(localData.rows);
@@ -317,9 +345,11 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
       : (dbType === 'SAP BW' && host.trim())
       ? `jdbc:sap://${host.trim()}:${port || '443'}?encrypt=true&validateCertificate=false&user=${username || ''}&password=${password || ''}`
       : connString;
-    const sampleRes = await fetchTableSample(tableName, 5, effectiveUri);
-    if (sampleRes && sampleRes.rows && sampleRes.rows.length > 0) {
-      setPreviewRows(sampleRes.rows);
+    if (!sandboxLoaded) {
+      const sampleRes = await fetchTableSample(tableName, 5, effectiveUri);
+      if (sampleRes && sampleRes.rows && sampleRes.rows.length > 0) {
+        setPreviewRows(sampleRes.rows);
+      }
     }
   };
 
@@ -339,7 +369,7 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
       password
     };
 
-    if (!isCredentialConfigured(candidateCreds)) {
+    if (!sandboxLoaded && !isCredentialConfigured(candidateCreds)) {
       setValidationError('Source credentials required: Please enter valid Connection URI or Host, Database, Username, and Password.');
       return;
     }
@@ -363,6 +393,7 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
     setSourceConfig(prev => ({
       ...prev,
       engine: engineKey,
+      demoSandbox: sandboxLoaded,
       connectionUri: effectiveUri,
       host,
       port,
@@ -371,7 +402,8 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
       password,
       table: primaryTable,
       availableTables: availableTables.map(t => t.name),
-      discoveredColumns: discoveredCols
+      discoveredColumns: discoveredCols,
+      sampleRows: previewRows
     }));
 
     navigateTo('generate-rules');
@@ -481,6 +513,7 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
                       const newType = e.target.value;
                       setDbType(newType);
                       setTestSuccess(false);
+                      setSandboxLoaded(false);
                       setTestError(null);
                       setValidationError(null);
                       if (newType === 'SAP BW') {
@@ -548,10 +581,10 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
                       onChange={(e) => setConnString(e.target.value)}
                       placeholder={
                         dbType === 'SAP BW' ? 'jdbc:sap://<host>:443' :
-                        dbType === 'MongoDB' ? 'mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<database>' :
+                        dbType === 'MongoDB' ? 'mongodb+srv://<cluster>.mongodb.net/<database>' :
                         dbType === 'Snowflake' ? 'https://<account>.snowflakecomputing.com' :
                         dbType === 'Databricks' ? 'https://<workspace>.azuredatabricks.net' :
-                        'postgresql://<user>:<password>@<host>:5432/<database>?sslmode=require'
+                        'postgresql://<host>:5432/<database>?sslmode=require'
                       }
                       className="w-full pl-3 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                     />
@@ -807,25 +840,30 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-4">
             
             {/* Connection Status Banner */}
-            {!testSuccess && (
+            {!testSuccess && !sandboxLoaded && (
               <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                 <div className="flex items-start gap-2 text-amber-900">
                   <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold">Offline / Sandbox Schema Preview</span>
-                    <p className="text-[11px] text-amber-700">Enter your database credentials & click <strong>Test Connection</strong> to query live tables, or use the preloaded sandbox catalog.</p>
+                    <p className="text-[11px] text-amber-700">Enter your database credentials and click <strong>Test Connection</strong> to query live tables, or load an explicitly labeled local sandbox dataset.</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleLoadDemoCredentials();
-                    setTimeout(handleTest, 50);
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] whitespace-nowrap cursor-pointer transition-colors shadow-2xs shrink-0"
-                >
-                  ⚡ Connect Sandbox
-                </button>
+                {dbType === 'SAP BW' && (
+                  <button
+                    type="button"
+                    onClick={handleLoadCertifiedSapSandbox}
+                    className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] whitespace-nowrap cursor-pointer transition-colors shadow-2xs shrink-0"
+                  >
+                    Load Certified SAP Sandbox Dataset
+                  </button>
+                )}
+              </div>
+            )}
+            {sandboxLoaded && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900">
+                <strong>Certified SAP Sandbox Dataset · Offline preview only</strong>
+                <p className="text-[11px] text-amber-700 mt-1">These local sample records are not a live SAP connection.</p>
               </div>
             )}
 
@@ -915,7 +953,7 @@ export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
                 <div className="border border-dashed border-slate-200 rounded-xl p-6 text-center text-xs text-slate-400 bg-slate-50/50">
                   <Database className="w-5 h-5 mx-auto text-slate-300 mb-1.5" />
                   <p className="font-semibold text-slate-600">No sample records</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Select a table above to load live sample rows from your database.</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{testSuccess ? 'Select a table above to load live sample rows from your database.' : 'Select a table above to load a local sandbox preview.'}</p>
                 </div>
               ) : (
                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">

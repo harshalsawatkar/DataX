@@ -35,7 +35,7 @@ export const FIREWALL_NODE_CATALOG = [
         defaultConfig: {
           sampleDoc: 'Vendor_Contract.pdf',
           sampleText:
-            'This agreement entered into by Harshal (SSN: 987-65-4321, harshal@enterprise.internal) contains proprietary OpenAI key sk-live-9482019482019482014820 and database uri postgresql://admin:secretPass@127.0.0.1:5432/datax.',
+            'This agreement entered into by Harshal (SSN: 987-65-4321, harshal@enterprise.internal) contains proprietary OpenAI key [OPENAI_KEY_REDACTED] and database uri [DATABASE_URI_REDACTED].',
           maxBytes: 10485760
         }
       },
@@ -334,7 +334,7 @@ export const FIREWALL_TEMPLATES = [
         config: {
           sampleDoc: 'Vendor_Contract.pdf',
           sampleText:
-            'Vendor agreement between AAVIL Inc and Partner Corp. Contact Harshal at harshal@enterprise.internal (SSN: 987-65-4321). OpenAI credentials: sk-ant-live9841298412984129. DB connection: postgresql://admin:secret@127.0.0.1:5432/datax.'
+            'Vendor agreement between AAVIL Inc and Partner Corp. Contact Harshal at harshal@enterprise.internal (SSN: 987-65-4321). OpenAI credentials: [API_KEY_REDACTED]. DB connection: [DB_CONNECTION_REDACTED].'
         }
       },
       {

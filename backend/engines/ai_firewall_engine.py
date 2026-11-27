@@ -18,24 +18,14 @@ from typing import Dict, Any, List, Optional
 from db_config import get_storage_uri, get_storage_connection
 from vault import DEFAULT_NEON_URI
 from studio_io_engine import chunk_text_with_overlap
-
-# Regular Expression Signatures for Secrets & Credentials
-SECRET_PATTERNS = [
-    ("OPENAI_API_KEY", re.compile(r"sk-[a-zA-Z0-9_-]{20,}")),
-    ("ANTHROPIC_API_KEY", re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}")),
-    ("AWS_ACCESS_KEY", re.compile(r"\b(AKIA|ABIA|ACCA)[0-9A-Z]{16}\b")),
-    ("GITHUB_PAT", re.compile(r"\bghp_[a-zA-Z0-9]{36}\b")),
-    ("SLACK_TOKEN", re.compile(r"\bxox[baprs]-[a-zA-Z0-9-]{15,}\b")),
-    ("GENERIC_BEARER_JWT", re.compile(r"\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\b")),
-    ("DATABASE_URI", re.compile(r"\b(mongodb(\+srv)?|postgresql|postgres|mysql|redis)://[^:\s]+:[^@\s]+@[^\s\"']+", re.IGNORECASE)),
-    ("PRIVATE_KEY_HEADER", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)")),
-]
-
-# Sensitive PII Patterns
-SSN_REGEX = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
-CREDIT_CARD_REGEX = re.compile(r"\b(?:\d{4}[- ]?){3}\d{4}\b")
-EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
-PHONE_REGEX = re.compile(r"\b(?:\+?\d{1,3}[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}\b")
+from core.pii_classifier import (
+    CREDIT_CARD_REGEX,
+    EMAIL_REGEX,
+    PHONE_REGEX,
+    SECRET_PATTERNS,
+    SSN_REGEX,
+    scan_text,
+)
 
 # Indirect Prompt Injection Signatures
 PROMPT_INJECTION_PATTERNS = [
@@ -248,39 +238,52 @@ def scan_single_chunk(
             if matches:
                 sanitized_text = pattern.sub(f"[REDACTED_{sec_name}]", sanitized_text)
 
-    # 3. PII Scanner (SSN & Credit Cards)
-    if redact_ssn_cards:
-        ssn_matches = list(SSN_REGEX.finditer(sanitized_text))
-        for _ in ssn_matches:
-            redactions.append({"type": "SSN", "original": "***-**-****", "replacement": "[REDACTED_SSN]"})
+    # 3. Unified PII Scanner
+    pii_candidates = [
+        item for item in scan_text(sanitized_text)["detections"]
+        if item["type"] == "PII"
+    ]
+    selected_pii = []
+    for item in pii_candidates:
+        subtype = item["subtype"]
+        if subtype in {"EMAIL"}:
+            if redact_emails:
+                selected_pii.append(item)
+        elif subtype in {"PHONE", "INDIAN_MOBILE"}:
+            if redact_phones:
+                selected_pii.append(item)
+        elif redact_ssn_cards:
+            selected_pii.append(item)
+
+    replacement_by_subtype = {
+        "SSN": "[REDACTED_SSN]",
+        "CREDIT_CARD": "[REDACTED_CARD]",
+        "EMAIL": "[REDACTED_EMAIL]",
+        "PHONE": "[REDACTED_PHONE]",
+        "INDIAN_MOBILE": "[REDACTED_PHONE]",
+    }
+    for item in reversed(selected_pii):
+        subtype = item["subtype"]
+        replacement = replacement_by_subtype.get(subtype, f"[REDACTED_{subtype}]")
+        original = {
+            "SSN": "***-**-****",
+            "CREDIT_CARD": "****-****-****-****",
+            "EMAIL": item["value"][:3] + "***@" + item["value"].split("@")[-1],
+            "PHONE": "***-***-****",
+            "INDIAN_MOBILE": "***-***-****",
+        }.get(subtype, "[REDACTED]")
+        redactions.append({"type": subtype, "original": original, "replacement": replacement})
+        if subtype == "SSN":
             violations.append("Government Identity PII Detected (SSN)")
-        if ssn_matches:
-            sanitized_text = SSN_REGEX.sub("[REDACTED_SSN]", sanitized_text)
-
-        cc_matches = list(CREDIT_CARD_REGEX.finditer(sanitized_text))
-        for _ in cc_matches:
-            redactions.append({"type": "CREDIT_CARD", "original": "****-****-****-****", "replacement": "[REDACTED_CARD]"})
+        elif subtype == "CREDIT_CARD":
             violations.append("Payment Card PII Detected (PCI-DSS)")
-        if cc_matches:
-            sanitized_text = CREDIT_CARD_REGEX.sub("[REDACTED_CARD]", sanitized_text)
-
-    # Optional Email & Phone PII Redaction
-    if redact_emails:
-        em_matches = list(EMAIL_REGEX.finditer(sanitized_text))
-        for m in em_matches:
-            val = m.group(0)
-            redactions.append({"type": "EMAIL", "original": val[:3] + "***@" + val.split("@")[-1], "replacement": "[REDACTED_EMAIL]"})
+        elif subtype == "EMAIL":
             violations.append("Email PII Masked")
-        if em_matches:
-            sanitized_text = EMAIL_REGEX.sub("[REDACTED_EMAIL]", sanitized_text)
-
-    if redact_phones:
-        ph_matches = list(PHONE_REGEX.finditer(sanitized_text))
-        for _ in ph_matches:
-            redactions.append({"type": "PHONE", "original": "***-***-****", "replacement": "[REDACTED_PHONE]"})
+        elif subtype in {"PHONE", "INDIAN_MOBILE"}:
             violations.append("Phone PII Masked")
-        if ph_matches:
-            sanitized_text = PHONE_REGEX.sub("[REDACTED_PHONE]", sanitized_text)
+        else:
+            violations.append(f"PII Detected ({subtype})")
+        sanitized_text = sanitized_text[:item["start"]] + replacement + sanitized_text[item["end"]:]
 
     # 3b. Indian DPDP PII Scanner (Aadhaar, PAN, GSTIN, UPI)
     try:
@@ -503,6 +506,52 @@ def _recursive_redact_obj(obj: Any, pattern: re.Pattern, replacement: str) -> An
     return obj
 
 
+_CLASSIFIED_REDACTIONS = {
+    "SSN": "[REDACTED_SSN]",
+    "CREDIT_CARD": "[REDACTED_CARD]",
+    "EMAIL": "[REDACTED_EMAIL]",
+    "PHONE": "[REDACTED_PHONE]",
+    "INDIAN_MOBILE": "[REDACTED_PHONE]",
+}
+
+
+def _redact_classified_text(text: str, subtypes: set) -> tuple:
+    detections = [
+        item for item in scan_text(text)["detections"]
+        if item["type"] == "PII" and item["subtype"] in subtypes
+    ]
+    sanitized = text
+    for item in reversed(detections):
+        replacement = _CLASSIFIED_REDACTIONS.get(
+            item["subtype"],
+            f"[REDACTED_{item['subtype']}]",
+        )
+        sanitized = sanitized[:item["start"]] + replacement + sanitized[item["end"]:]
+    return sanitized, detections
+
+
+def _recursive_redact_classified_obj(obj: Any, subtypes: set) -> tuple:
+    if isinstance(obj, str):
+        return _redact_classified_text(obj, subtypes)
+    if isinstance(obj, list):
+        output = []
+        detections = []
+        for value in obj:
+            redacted, found = _recursive_redact_classified_obj(value, subtypes)
+            output.append(redacted)
+            detections.extend(found)
+        return output, detections
+    if isinstance(obj, dict):
+        output = {}
+        detections = []
+        for key, value in obj.items():
+            redacted, found = _recursive_redact_classified_obj(value, subtypes)
+            output[key] = redacted
+            detections.extend(found)
+        return output, detections
+    return obj, []
+
+
 def _extract_numeric_fields(obj: Any, target_keys: set, found: List[tuple]):
     if isinstance(obj, dict):
         for k, v in obj.items():
@@ -595,29 +644,34 @@ def intercept_agent_tool_call(payload: Dict[str, Any]) -> Dict[str, Any]:
                 args_str = json.dumps(sanitized_args)
 
     if effective_policy.get("redact_pii_in_args", True):
-        if SSN_REGEX.search(args_str):
-            violations.append("Tool Argument Contains Unmasked SSN")
-            if verdict == "ALLOW":
-                verdict = "ALLOW_REDACTED"
-            risk_score = max(risk_score, 6.0)
-            sanitized_args = _recursive_redact_obj(sanitized_args, SSN_REGEX, "[REDACTED_SSN]")
-            args_str = json.dumps(sanitized_args)
-
-        if CREDIT_CARD_REGEX.search(args_str):
-            violations.append("Tool Argument Contains Unmasked Payment Card")
-            if verdict == "ALLOW":
-                verdict = "ALLOW_REDACTED"
-            risk_score = max(risk_score, 6.5)
-            sanitized_args = _recursive_redact_obj(sanitized_args, CREDIT_CARD_REGEX, "[REDACTED_CARD]")
-            args_str = json.dumps(sanitized_args)
+        sanitized_args, pii_detections = _recursive_redact_classified_obj(
+            sanitized_args,
+            {"SSN", "CREDIT_CARD", "AADHAAR", "PAN", "GSTIN", "IFSC", "UPI_VPA"},
+        )
+        for item in pii_detections:
+            if item["subtype"] == "SSN":
+                violations.append("Tool Argument Contains Unmasked SSN")
+                risk_score = max(risk_score, 6.0)
+            elif item["subtype"] == "CREDIT_CARD":
+                violations.append("Tool Argument Contains Unmasked Payment Card")
+                risk_score = max(risk_score, 6.5)
+            else:
+                violations.append(f"Tool Argument Contains Unmasked {item['subtype']}")
+                risk_score = max(risk_score, 6.0)
+        if pii_detections and verdict == "ALLOW":
+            verdict = "ALLOW_REDACTED"
+        args_str = json.dumps(sanitized_args)
 
     if effective_policy.get("redact_emails_in_args", False):
-        if EMAIL_REGEX.search(args_str):
-            violations.append("Tool Argument Email PII Redacted")
+        sanitized_args, contact_detections = _recursive_redact_classified_obj(
+            sanitized_args,
+            {"EMAIL", "PHONE", "INDIAN_MOBILE"},
+        )
+        if contact_detections:
+            violations.append("Tool Argument Contact PII Redacted")
             if verdict == "ALLOW":
                 verdict = "ALLOW_REDACTED"
             risk_score = max(risk_score, 3.5)
-            sanitized_args = _recursive_redact_obj(sanitized_args, EMAIL_REGEX, "[REDACTED_EMAIL]")
             args_str = json.dumps(sanitized_args)
 
     # 4. Custom Restricted Terms

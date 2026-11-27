@@ -514,7 +514,7 @@ export default function AiFirewallCanvas({ onSwitchToStudio }) {
         chunks: [
           {
             docName: 'Vendor_Contract.pdf',
-            text: 'Employee agreement for Harshal (SSN: 987-65-4321, harshal@enterprise.internal). API key sk-ant-live9841204810294821 and DB postgresql://datax:DataX_Local_2027!@127.0.0.1:5432/datax.'
+            text: 'Employee agreement for Harshal (SSN: 987-65-4321, harshal@enterprise.internal). API key [SAMPLE_TOKEN_SECRET] and DB [SAMPLE_DATABASE_URI].'
           },
           {
             docName: 'Adversarial_Appendix.md',

@@ -336,10 +336,10 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   const [connectMethod, setConnectMethod] = useState('host'); // 'host' | 'string'
   const [connString, setConnString] = useState(sourceConfig?.connectionUri || '');
   const [showConnString, setShowConnString] = useState(false);
-  const [srcHost, setSrcHost] = useState(sourceConfig?.host || 'hana.corp.ondemand.com');
+  const [srcHost, setSrcHost] = useState(sourceConfig?.host || '');
   const [srcPort, setSrcPort] = useState(sourceConfig?.port || '443');
   const [srcDbName, setSrcDbName] = useState(sourceConfig?.database || 'SAP_BW');
-  const [srcUser, setSrcUser] = useState(sourceConfig?.user || 'bwp_rfc_user');
+  const [srcUser, setSrcUser] = useState(sourceConfig?.user || '');
   const [srcPass, setSrcPass] = useState(sourceConfig?.password || '');
   const [showPassword, setShowPassword] = useState(false);
   const [srcTable, setSrcTable] = useState(sourceConfig?.table || '0PUR_C01');
@@ -514,27 +514,27 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     }
     if (norm.includes('azure') || norm.includes('blob')) {
       setSrcDbType('Azure');
-      setSrcHost(import.meta.env.VITE_AZURE_STORAGE_ACCOUNT || 'irepazurestorage');
-      setSrcPort(import.meta.env.VITE_AZURE_STORAGE_CONTAINER || 'telemetry-container');
-      setSrcDbName(import.meta.env.VITE_AZURE_TENANT_ID || '');
-      setSrcUser(import.meta.env.VITE_AZURE_CLIENT_ID || '');
-      setSrcPass(import.meta.env.VITE_AZURE_STORAGE_KEY || '');
+      setSrcHost('');
+      setSrcPort('');
+      setSrcDbName('');
+      setSrcUser('');
+      setSrcPass('');
       setSrcTable(tableName || 'telemetry_logs.parquet');
     } else if (norm.includes('s3') || norm.includes('aws')) {
       setSrcDbType('AWS S3');
-      setSrcPort(import.meta.env.VITE_AWS_DEFAULT_REGION || 'us-east-1');
-      setSrcHost(import.meta.env.VITE_AWS_S3_BUCKET_URI || 's3://datax-enterprise-lake/raw-landing/');
+      setSrcPort('us-east-1');
+      setSrcHost('');
       setSrcDbName('Parquet (Snappy)');
-      setSrcUser(import.meta.env.VITE_AWS_ACCESS_KEY_ID || '');
-      setSrcPass(import.meta.env.VITE_AWS_SECRET_ACCESS_KEY || '');
+      setSrcUser('');
+      setSrcPass('');
       setSrcTable(tableName || 'orders_2026_q1.parquet');
     } else if (norm.includes('salesforce') || norm.includes('crm')) {
       setSrcDbType('Salesforce');
       setSrcPort('443');
-      setSrcHost(import.meta.env.VITE_SALESFORCE_INSTANCE_URL || 'login.salesforce.com');
-      setSrcDbName(import.meta.env.VITE_SALESFORCE_CLIENT_ID || '');
-      setSrcUser(import.meta.env.VITE_SALESFORCE_USERNAME || '');
-      setSrcPass(import.meta.env.VITE_SALESFORCE_PASSWORD || '');
+      setSrcHost('');
+      setSrcDbName('');
+      setSrcUser('');
+      setSrcPass('');
       setSrcTable(tableName || 'Account');
     } else if (norm.includes('mongo')) {
       setSrcDbType('MongoDB');
@@ -548,10 +548,10 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
         setSrcTable(tableName || sourceConfig.table || 'raw_customers');
       } else {
         setSrcPort('27017');
-        setSrcHost(import.meta.env.VITE_MONGO_HOST || 'cluster0.tb6bhff.mongodb.net');
-        setSrcDbName('datax_staging');
-        setSrcUser(import.meta.env.VITE_MONGO_USER || 'harshal');
-        setSrcPass(import.meta.env.VITE_MONGO_PASSWORD || '');
+        setSrcHost('');
+        setSrcDbName('');
+        setSrcUser('');
+        setSrcPass('');
         setSrcTable(tableName || 'raw_customers');
       }
     } else if (norm.includes('postgres')) {
@@ -566,27 +566,27 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
         setSrcTable(tableName || sourceConfig.table || 'customers');
       } else {
         setSrcPort('5432');
-        setSrcHost(import.meta.env.VITE_POSTGRES_HOST || 'postgres.internal.net');
-        setSrcDbName('neondb');
-        setSrcUser(import.meta.env.VITE_POSTGRES_USER || 'ruleengineadmin');
-        setSrcPass(import.meta.env.VITE_POSTGRES_PASSWORD || '');
+        setSrcHost('');
+        setSrcDbName('');
+        setSrcUser('');
+        setSrcPass('');
         setSrcTable(tableName || 'users');
       }
     } else if (norm.includes('snowflake')) {
       setSrcDbType('Snowflake');
       setSrcPort('443');
-      setSrcHost(import.meta.env.VITE_SNOWFLAKE_HOST || 'xy12345.us-east-1.snowflakecomputing.com');
-      setSrcDbName('ANALYTICS_LANDING');
-      setSrcUser(import.meta.env.VITE_SNOWFLAKE_USER || 'datax_svc');
-      setSrcPass(import.meta.env.VITE_SNOWFLAKE_PASSWORD || '');
+      setSrcHost('');
+      setSrcDbName('');
+      setSrcUser('');
+      setSrcPass('');
       setSrcTable(tableName || '0PUR_C01');
     } else {
       setSrcDbType('SAP BW');
       setSrcPort('443');
-      setSrcHost(import.meta.env.VITE_SAP_HOST || 'hana.corp.ondemand.com');
-      setSrcDbName('SAP_BW');
-      setSrcUser(import.meta.env.VITE_SAP_USER || 'bwp_rfc_user');
-      setSrcPass(import.meta.env.VITE_SAP_PASSWORD || '');
+      setSrcHost('');
+      setSrcDbName('');
+      setSrcUser('');
+      setSrcPass('');
       setSrcTable(tableName || '0PUR_C01');
     }
   };
@@ -716,20 +716,20 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   const [hitlCustomOp, setHitlCustomOp] = useState('>');
   const [hitlCustomVal, setHitlCustomVal] = useState('50000');
   const [hitlCustomExpression, setHitlCustomExpression] = useState('TOTAL_AMOUNT > 50000');
-  // Pinecone Vector DB states (loaded securely from .env)
-  const [pineconeIndex, setPineconeIndex] = useState(import.meta.env.VITE_PINECONE_INDEX || 'enterprise-knowledge-base');
-  const [pineconeHost, setPineconeHost] = useState(import.meta.env.VITE_PINECONE_HOST || '');
-  const [pineconeApiKey, setPineconeApiKey] = useState(import.meta.env.VITE_PINECONE_API_KEY || '');
-  const [pineconeNamespace, setPineconeNamespace] = useState(import.meta.env.VITE_PINECONE_NAMESPACE || 'production');
-  const [pineconeDimension, setPineconeDimension] = useState(import.meta.env.VITE_PINECONE_DIMENSION || '1024');
+  // Pinecone Vector DB states
+  const [pineconeIndex, setPineconeIndex] = useState('enterprise-knowledge-base');
+  const [pineconeHost, setPineconeHost] = useState('');
+  const [pineconeApiKey, setPineconeApiKey] = useState('');
+  const [pineconeNamespace, setPineconeNamespace] = useState('production');
+  const [pineconeDimension, setPineconeDimension] = useState('1024');
   const [pineconeMetric, setPineconeMetric] = useState('cosine');
-  // Google BigQuery states (loaded securely from .env)
-  const [bqProject, setBqProject] = useState(import.meta.env.VITE_BIGQUERY_PROJECT_ID || '');
-  const [bqDataset, setBqDataset] = useState(import.meta.env.VITE_BIGQUERY_DATASET_ID || '');
+  // Google BigQuery states
+  const [bqProject, setBqProject] = useState('');
+  const [bqDataset, setBqDataset] = useState('');
   const [bqTable, setBqTable] = useState('0PUR_C01_clean');
-  const [bqLocation, setBqLocation] = useState(import.meta.env.VITE_BIGQUERY_LOCATION || 'US');
-  const [bqEmail, setBqEmail] = useState(import.meta.env.VITE_BIGQUERY_CLIENT_EMAIL || '');
-  const [bqKeyId, setBqKeyId] = useState(import.meta.env.VITE_BIGQUERY_PRIVATE_KEY_ID || '');
+  const [bqLocation, setBqLocation] = useState('US');
+  const [bqEmail, setBqEmail] = useState('');
+  const [bqKeyId, setBqKeyId] = useState('');
   const [bqWriteMode, setBqWriteMode] = useState('append');
   // Target Modal states
   const [tgtDbType, setTgtDbType] = useState('SAP S/4HANA');
@@ -2018,7 +2018,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     // Auto-align Target node when switching from SAP template to MongoDB or Postgres
     if (srcDbType.includes('Mongo') || srcDbType.includes('Postgres')) {
       const derivedTgtTable = srcTable ? srcTable.replace(/^raw_/, '') : 'customers';
-      const neonUri = 'postgresql://neondb_owner:npg_Eim1u6bIldRL@ep-square-breeze-aqokq2fe-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require';
+      const neonUri = '';
       if (tgtDbType.includes('SAP') || tgtTable === '0PUR_C01_clean') {
         setTgtDbType('PostgreSQL');
         setTgtTable(derivedTgtTable);
@@ -2028,7 +2028,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           engine: 'postgres',
           table: derivedTgtTable,
           connectionUri: neonUri,
-          host: 'ep-square-breeze-aqokq2fe-pooler.c-8.us-east-1.aws.neon.tech',
+          host: '',
           database: 'neondb'
         }));
         setNodes(prev => prev.map(n => n.type === 'target' ? {
@@ -2152,8 +2152,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   };
   const handleSaveTargetConfig = () => {
     const engineKey = tgtDbType.includes('SAP') ? 's4_hana' : tgtDbType.includes('Databricks') ? 'databricks' : 'postgres';
-    const defaultNeonUri = 'postgresql://neondb_owner:npg_Eim1u6bIldRL@ep-square-breeze-aqokq2fe-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require';
-    const effectiveUri = (tgtEndpoint || '').trim() || (engineKey === 'postgres' ? defaultNeonUri : '');
+    const effectiveUri = (tgtEndpoint || '').trim();
     const effectiveTable = tgtTable || (srcTable ? (srcTable.startsWith('raw_') ? srcTable.replace('raw_', '') : `${srcTable}_clean`) : 'customers');
     setTargetConfig(prev => ({
       ...prev,
@@ -2161,9 +2160,9 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       table: effectiveTable,
       writeMode: writeMode,
       connectionUri: effectiveUri,
-      host: effectiveUri.includes('//') ? effectiveUri.split('//')[1].split('/')[0] : (engineKey === 'postgres' ? 'ep-square-breeze-aqokq2fe-pooler.c-8.us-east-1.aws.neon.tech' : 's4h.corp.ondemand.com'),
+      host: effectiveUri.includes('//') ? effectiveUri.split('//')[1].split('/')[0] : '',
       database: engineKey === 'postgres' ? 'neondb' : 'reconciled_db',
-      user: 'cleanflow_writer',
+      user: '',
       password: ''
     }));
     setNodes(prev => prev.map(n => n.id === selectedNodeId ? {
