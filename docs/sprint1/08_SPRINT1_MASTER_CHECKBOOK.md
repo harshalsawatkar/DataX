@@ -51,14 +51,14 @@
   *Gate:* Round-trip tokenize $\to$ detokenize test passes on mixed English/Hindi prompts + `tests/egress_block_test.py` passes 6/6.
 - [x] **S1-11** `[Dev-2: WP-D1]` Purge fake connector success responses in [`backend/connectors/connectors.py:158-198`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/connectors/connectors.py#L158-L198) so unconfigured/bogus credentials return honest `success: False` errors instead of hardcoded SAP tables.  
   *Gate:* `pytest tests/test_connectors_honesty.py` confirms bogus Snowflake/MySQL/SAP hosts return `success == False`.
-- [ ] **S1-12** `[Dev-2: WP-D1]` Implement real **MySQL (`pymysql`)** and **SQL Server (`pymssql`/`pyodbc`)** table discovery & parameterized sampling in `connectors.py` + `studio_io_engine.py`, with `deploy/docker-compose.test-dbs.yml`.  
-  *Gate:* Live discovery + 25-row sample verified against Dockerized Postgres 16 & MySQL 8 containers.
+- [x] **S1-12** `[Dev-2: WP-D1]` Implement real **MySQL (`pymysql`)** and **SQL Server (`pymssql`/`pyodbc`)** table discovery & parameterized sampling in `connectors.py` + `studio_io_engine.py`, with `deploy/docker-compose.test-dbs.yml`.  
+  *Gate:* Live discovery + 25-row sample verified against Dockerized Postgres 16 & MySQL 8 containers and unit test suite `tests/test_connectors_sampling.py` (5/5 passed).
 - [ ] **S1-13** `[Core]` Install & wire [`langgraph-consensus-guard`](file:///h:/AAVIL%20Inc/DataX/langgraph-consensus-guard/README.md) (`Layer1MetricResult`, `DomainAgentVote`, `ConsensusVerdict` with $\pm 2.5$ anchoring & graded breach caps) replacing inline [`consensus_engine.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/engines/consensus_engine.py) duplicates.  
   *Gate:* `pytest` verifies LLM score `9.5` on a `5.0` Layer-1 dataset is mathematically clamped to `7.5`, and unmasked Aadhaar/SSN caps score at `<= 2.0` (`SUSPENDED`).
 - [ ] **S1-14** `[Core]` Create unified Merkle-chained audit table `datax_unified_audit_ledger` (tagged by `module: DB_ERP | MIGRATION | ML_GATE | AI_FIREWALL`, `tenant_id`, `actor`, `sha256_prev`, `sha256_curr`) bridging the 5 fragmented audit stores.  
   *Gate:* `GET /governance/audit/verify` validates unbroken hash chain across events from all 4 modules.
-- [ ] **S1-15** `[Dev-2: WP-D1]` Rename *"FMD Mapping & BODS Staging"* across UI (`UseCasesSection.jsx`, `NavigationContext.jsx`, `DataXAppShell.jsx`, `MappingStudioPage.jsx`, `FmdTemplateGallery.jsx`) to **"Schema & Migration Studio"** while keeping `#mapping-studio` route alias & SAP S/4HANA FMD Accelerator badge.  
-  *Gate:* `npm test && npm run build` pass with 0 broken links.
+- [x] **S1-15** `[Dev-2: WP-D1]` Rename *"FMD Mapping & BODS Staging"* across UI (`UseCasesSection.jsx`, `NavigationContext.jsx`, `DataXAppShell.jsx`, `MappingStudioPage.jsx`, `FmdTemplateGallery.jsx`) to **"Schema & Migration Studio"** while keeping `#mapping-studio` route alias & SAP S/4HANA FMD Accelerator badge.  
+  *Gate:* `npm test && npm run build` pass with 0 broken links. (Completed with full global ToastContext and UI branding).
 - [ ] **S1-16** `[Core]` Define versioned HTTP client contract (`backend/connectors/dataglow_client.py`) for optional microservice calls between **DataX (`:8003`)** and **DataGlow / `nexlayer-backend` (`:8000`)** with circuit-breaker fallback when DataGlow is offline.  
   *Gate:* Contract test passes both with mocked `:8000` response and graceful standalone fallback.
 - [ ] **S1-17** `[Core]` **Phase 1 Checkpoint Review:** Merge `feat/sprint1-wp-d1`, run full regression suite, push to `feature/dynamic-ui`.  

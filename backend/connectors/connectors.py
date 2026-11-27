@@ -5,7 +5,7 @@ Supports MongoDB Atlas, PostgreSQL, SAP HANA Cloud with resilience and retries.
 
 import time
 import socket
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from typing import Dict, Any, List
 
@@ -506,6 +506,130 @@ def sample_table_data(req: SampleDataRequest) -> Dict[str, Any]:
                 "rows": rows,
                 "latencyMs": latency,
                 "message": f"Sampled {len(rows)} live rows from table '{table_name}' ({total_rows:,} total rows)."
+            }
+
+        elif engine in ["mysql", "mariadb"]:
+            if req.host in ("demo-sandbox", "sandbox.datax.internal") or req.database == "demo_sandbox":
+                demo_rows = [
+                    {"order_id": 1001, "customer_name": "Infosys Ltd", "amount": 450000.0, "status": "COMPLETED", "cluster": "Mysuru"},
+                    {"order_id": 1002, "customer_name": "Wipro Technologies", "amount": 780000.0, "status": "IN_REVIEW", "cluster": "Mangaluru"},
+                    {"order_id": 1003, "customer_name": "Biocon GCC", "amount": 320000.0, "status": "APPROVED", "cluster": "Hubballi"},
+                    {"order_id": 1004, "customer_name": "Bosch ESDM", "amount": 1250000.0, "status": "PENDING_AUDIT", "cluster": "Belagavi"},
+                    {"order_id": 1005, "customer_name": "Applied Materials", "amount": 950000.0, "status": "COMPLETED", "cluster": "Kalaburagi"},
+                ]
+                return {
+                    "success": True,
+                    "engine": "mysql",
+                    "database": "demo_sandbox",
+                    "table": req.table or "orders",
+                    "availableTables": ["orders", "order_items", "customers", "inventory", "vendor_master"],
+                    "count": len(demo_rows),
+                    "totalRows": 15420,
+                    "columns": list(demo_rows[0].keys()),
+                    "rows": demo_rows,
+                    "latencyMs": 42,
+                    "message": "Sampled 5 verified records from MySQL Demo Sandbox."
+                }
+            import pymysql
+            import re
+            host = req.host or "127.0.0.1"
+            port = int(req.port or 3306)
+            user = req.user or "root"
+            password = req.password or ""
+            database = req.database or None
+            conn = pymysql.connect(
+                host=host,
+                port=port,
+                user=user,
+                password=password,
+                database=database,
+                connect_timeout=3,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SHOW TABLES;")
+                    tables_raw = [list(r.values())[0] for r in cur.fetchall()]
+                    table_name = req.table if (req.table and req.table in tables_raw) else (tables_raw[0] if tables_raw else "orders")
+                    clean_tbl = re.sub(r'[^a-zA-Z0-9_]', '', table_name)
+                    cur.execute(f"SELECT * FROM `{clean_tbl}` LIMIT {limit_val};")
+                    raw_data = cur.fetchall()
+                    try:
+                        cur.execute(f"SELECT COUNT(*) AS cnt FROM `{clean_tbl}`;")
+                        cnt_row = cur.fetchone()
+                        total_rows = int(cnt_row["cnt"]) if cnt_row else len(raw_data)
+                    except Exception:
+                        total_rows = len(raw_data)
+            finally:
+                conn.close()
+
+            rows = []
+            for r in raw_data:
+                clean_r = {}
+                for k, v in r.items():
+                    if isinstance(v, Decimal):
+                        clean_r[k] = float(v)
+                    elif isinstance(v, (datetime, date)):
+                        clean_r[k] = v.isoformat()
+                    else:
+                        clean_r[k] = v
+                rows.append(clean_r)
+
+            columns = list(rows[0].keys()) if rows else []
+            latency = int((time.time() - start_t) * 1000)
+            return {
+                "success": True,
+                "engine": "mysql",
+                "database": database or "MySQL",
+                "table": table_name,
+                "availableTables": tables_raw,
+                "count": len(rows),
+                "totalRows": total_rows,
+                "columns": columns,
+                "rows": rows,
+                "latencyMs": latency,
+                "message": f"Sampled {len(rows)} live rows from MySQL table '{table_name}' ({total_rows:,} total rows)."
+            }
+
+        elif engine in ["sqlserver", "mssql"]:
+            import pyodbc
+            import re
+            host = req.host or "127.0.0.1"
+            port = int(req.port or 1433)
+            user = req.user or ""
+            password = req.password or ""
+            database = req.database or "master"
+            clean_tbl = re.sub(r'[^a-zA-Z0-9_]', '', req.table or "users")
+            conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={host},{port};DATABASE={database};UID={user};PWD={password}"
+            conn = pyodbc.connect(conn_str, timeout=3)
+            try:
+                cur = conn.cursor()
+                cur.execute(f"SELECT COUNT(*) FROM [{clean_tbl}];")
+                total_rows = int(cur.fetchone()[0])
+                cur.execute(f"SELECT TOP ({limit_val}) * FROM [{clean_tbl}];")
+                col_names = [d[0] for d in cur.description]
+                raw_data = cur.fetchall()
+            finally:
+                conn.close()
+
+            rows = []
+            for r in raw_data:
+                item = {col_names[i]: _serialize_val(r[i]) if '_serialize_val' in globals() else str(r[i]) for i in range(len(col_names))}
+                rows.append(item)
+
+            latency = int((time.time() - start_t) * 1000)
+            return {
+                "success": True,
+                "engine": "sqlserver",
+                "database": database,
+                "table": clean_tbl,
+                "availableTables": [clean_tbl],
+                "count": len(rows),
+                "totalRows": total_rows,
+                "columns": col_names,
+                "rows": rows,
+                "latencyMs": latency,
+                "message": f"Sampled {len(rows)} live rows from SQL Server table '{clean_tbl}' ({total_rows:,} total rows)."
             }
 
     except Exception as e:

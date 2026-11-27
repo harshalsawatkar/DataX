@@ -47,6 +47,18 @@ def _resolve_studio_uri(
     return ""
 
 
+def _parse_db_uri(uri: str, default_port: int = 3306) -> Dict[str, Any]:
+    from urllib.parse import urlparse, unquote
+    p = urlparse(uri)
+    return {
+        "host": p.hostname or "127.0.0.1",
+        "port": p.port or default_port,
+        "user": unquote(p.username or "") if p.username else "",
+        "password": unquote(p.password or "") if p.password else "",
+        "database": p.path.lstrip("/").split("?")[0] if p.path else "",
+    }
+
+
 def _sanitize_identifier(name: str, fallback: str = "datax_output") -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9_]", "_", (name or "").strip())
     cleaned = re.sub(r"_+", "_", cleaned).strip("_")
@@ -142,8 +154,78 @@ def list_database_tables(
             "latencyMs": round((time.time() - start_t) * 1000, 1)
         }
 
+    elif eng in ["mysql", "mariadb"]:
+        import pymysql
+        cfg = _parse_db_uri(uri, 3306)
+        db_name = database or cfg["database"] or None
+        conn = pymysql.connect(
+            host=cfg["host"],
+            port=int(cfg["port"]),
+            user=cfg["user"],
+            password=cfg["password"],
+            database=db_name,
+            connect_timeout=6,
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        try:
+            with conn.cursor() as cur:
+                if db_name:
+                    cur.execute("""
+                        SELECT TABLE_NAME as name, TABLE_ROWS as approx_rows
+                        FROM information_schema.tables
+                        WHERE TABLE_SCHEMA = %s AND TABLE_TYPE = 'BASE TABLE'
+                        ORDER BY TABLE_NAME;
+                    """, (db_name,))
+                else:
+                    cur.execute("""
+                        SELECT TABLE_NAME as name, TABLE_ROWS as approx_rows
+                        FROM information_schema.tables
+                        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
+                        ORDER BY TABLE_NAME;
+                    """)
+                rows = cur.fetchall()
+                tables = [r["name"] for r in rows]
+                details = [{"name": r["name"], "approxRows": int(r["approx_rows"] or 0)} for r in rows]
+        finally:
+            conn.close()
+        return {
+            "status": "success",
+            "engine": "mysql",
+            "database": db_name or "default",
+            "tables": tables,
+            "tableDetails": details,
+            "latencyMs": round((time.time() - start_t) * 1000, 1),
+        }
+
+    elif eng in ["sqlserver", "mssql"]:
+        import pyodbc
+        cfg = _parse_db_uri(uri, 1433)
+        db_name = database or cfg["database"] or "master"
+        conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={cfg['host']},{cfg['port']};DATABASE={db_name};UID={cfg['user']};PWD={cfg['password']}"
+        conn = pyodbc.connect(conn_str, timeout=6)
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT TABLE_NAME
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_TYPE = 'BASE TABLE'
+                ORDER BY TABLE_NAME;
+            """)
+            tables = [r[0] for r in cur.fetchall()]
+            details = [{"name": t, "approxRows": 0} for t in tables]
+        finally:
+            conn.close()
+        return {
+            "status": "success",
+            "engine": "sqlserver",
+            "database": db_name,
+            "tables": tables,
+            "tableDetails": details,
+            "latencyMs": round((time.time() - start_t) * 1000, 1),
+        }
+
     else:
-        raise ValueError(f"Unsupported database engine '{engine}'. Supported engines: PostgreSQL, MongoDB.")
+        raise ValueError(f"Unsupported database engine '{engine}'. Supported engines: PostgreSQL, MongoDB, MySQL, SQL Server.")
 
 
 def extract_database_records(
@@ -245,8 +327,88 @@ def extract_database_records(
             "latencyMs": round((time.time() - start_t) * 1000, 1)
         }
 
+    elif eng in ["mysql", "mariadb"]:
+        import pymysql
+        cfg = _parse_db_uri(uri, 3306)
+        db_name = database or cfg["database"] or None
+        clean_tbl = re.sub(r"[^a-zA-Z0-9_]", "", table_name)
+        conn = pymysql.connect(
+            host=cfg["host"],
+            port=int(cfg["port"]),
+            user=cfg["user"],
+            password=cfg["password"],
+            database=db_name,
+            connect_timeout=8,
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) as cnt FROM `{clean_tbl}`;")
+                cnt_row = cur.fetchone()
+                total_rows = int(cnt_row.get("cnt", 0) if cnt_row else 0)
+
+                cur.execute(f"SELECT * FROM `{clean_tbl}` LIMIT %s;", (safe_limit,))
+                raw_rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        records = []
+        columns = []
+        for r in raw_rows:
+            item = {}
+            for k, v in r.items():
+                if k not in columns:
+                    columns.append(k)
+                item[k] = _serialize_val(v)
+            records.append(item)
+
+        return {
+            "status": "success",
+            "engine": "mysql",
+            "table": clean_tbl,
+            "totalRowsInTable": total_rows,
+            "extractedCount": len(records),
+            "columns": columns,
+            "records": records,
+            "latencyMs": round((time.time() - start_t) * 1000, 1),
+        }
+
+    elif eng in ["sqlserver", "mssql"]:
+        import pyodbc
+        cfg = _parse_db_uri(uri, 1433)
+        db_name = database or cfg["database"] or "master"
+        clean_tbl = re.sub(r"[^a-zA-Z0-9_]", "", table_name)
+        conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={cfg['host']},{cfg['port']};DATABASE={db_name};UID={cfg['user']};PWD={cfg['password']}"
+        conn = pyodbc.connect(conn_str, timeout=8)
+        try:
+            cur = conn.cursor()
+            cur.execute(f"SELECT COUNT(*) FROM [{clean_tbl}];")
+            total_rows = int(cur.fetchone()[0])
+
+            cur.execute(f"SELECT TOP ({safe_limit}) * FROM [{clean_tbl}];")
+            col_names = [d[0] for d in cur.description]
+            raw_rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        records = []
+        for r in raw_rows:
+            item = {col_names[i]: _serialize_val(r[i]) for i in range(len(col_names))}
+            records.append(item)
+
+        return {
+            "status": "success",
+            "engine": "sqlserver",
+            "table": clean_tbl,
+            "totalRowsInTable": total_rows,
+            "extractedCount": len(records),
+            "columns": col_names,
+            "records": records,
+            "latencyMs": round((time.time() - start_t) * 1000, 1),
+        }
+
     else:
-        raise ValueError(f"Unsupported database engine '{engine}'.")
+        raise ValueError(f"Unsupported database engine '{engine}'. Supported engines: PostgreSQL, MongoDB, MySQL, SQL Server.")
 
 
 def _infer_pg_type(values: List[Any]) -> str:
