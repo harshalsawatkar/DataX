@@ -64,21 +64,11 @@ export default function TargetModalPanel({
             <span className="text-[11px] text-slate-500">Verifies write endpoint & discovers target tables</span>
           </div>
           <div className="min-w-0 flex items-center gap-2.5">
-            {tgtTestMeta && (
-              tgtTestMeta.success ? (
-                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-2xs">
-                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  Connected ({tgtTestMeta.latencyMs}ms)
-                </span>
-              ) : (
-                <span
-                  className="text-xs font-bold text-rose-700 flex items-center gap-1.5 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200 shadow-2xs"
-                  title={tgtTestMeta.error || tgtTestMeta.message}
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                  Target Failed
-                </span>
-              )
+            {tgtTestMeta && tgtTestMeta.success && (
+              <span className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-2xs">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                Connected ({tgtTestMeta.latencyMs}ms)
+              </span>
             )}
             <button
               type="button"

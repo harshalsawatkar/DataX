@@ -556,21 +556,11 @@ export default function SourceModalPanel({
               </span>
             </div>
             <div className="min-w-0 flex items-center gap-2.5">
-              {srcTestMeta && srcTestMeta.nodeId === selectedNode.id && (
-                srcTestMeta.success ? (
-                  <span className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-2xs animate-in fade-in">
-                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    Connected ({srcTestMeta.latencyMs}ms)
-                  </span>
-                ) : (
-                  <span
-                    className="text-xs font-bold text-rose-700 flex items-center gap-1.5 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200 shadow-2xs animate-in fade-in"
-                    title={srcTestMeta.error || srcTestMeta.message}
-                  >
-                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                    Connection Failed
-                  </span>
-                )
+              {srcTestMeta && srcTestMeta.nodeId === selectedNode.id && srcTestMeta.success && (
+                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-2xs animate-in fade-in">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  Connected ({srcTestMeta.latencyMs}ms)
+                </span>
               )}
               <button
                 type="button"
