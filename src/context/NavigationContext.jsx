@@ -12,6 +12,8 @@ const SCREEN_TITLES = {
   firewall: 'AI Agent & RAG Pre-Embedding Data Firewall',
   'ml-certify': 'ML & LLM Fine-Tuning Dataset Certification',
   'ml-gate': 'ML & LLM Fine-Tuning Dataset Certification',
+  'mapping-studio': 'Schema & Migration Studio',
+  'migration-studio': 'Schema & Migration Studio',
   canvas: 'CleanFlow Studio Visual Canvas',
   'workflow-builder': 'CleanFlow Studio Visual Canvas',
   'rules-table': 'Rule Engine & AST Validator',
@@ -37,6 +39,11 @@ const SCREEN_TITLES = {
 };
 
 const NavigationContext = createContext(null);
+const SCREEN_ALIASES = {
+  'migration-studio': 'mapping-studio',
+};
+
+const normalizeScreen = (screen) => SCREEN_ALIASES[screen] || screen;
 
 export function resolveScreenFromLocation(fallback = 'threads') {
   if (typeof window === 'undefined') return fallback;
@@ -48,7 +55,7 @@ export function resolveScreenFromLocation(fallback = 'threads') {
     if (hash.startsWith('runs/') || hash.startsWith('run/')) {
       return 'history';
     }
-    return hash;
+    return normalizeScreen(hash);
   }
 
   // 2. Check pathname (e.g. /datax/settings, /datax/ai-firewall, /settings)
@@ -60,7 +67,7 @@ export function resolveScreenFromLocation(fallback = 'threads') {
       if (last.startsWith('runs') || last.startsWith('run')) {
         return 'history';
       }
-      return last;
+      return normalizeScreen(last);
     }
   }
 
@@ -107,7 +114,7 @@ export function NavigationProvider({ children, initialScreen = 'threads' }) {
   }, [currentScreen]);
 
   const navigateTo = (screen) => {
-    const clean = screen.replace('#', '').replace(/^\/+/, '');
+    const clean = normalizeScreen(screen.replace('#', '').replace(/^\/+/, ''));
     setCurrentScreen(clean || 'threads');
     window.location.hash = `#${clean || 'threads'}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });

@@ -12,9 +12,7 @@ import time
 import hashlib
 from typing import Dict, Any, List, Optional, Tuple
 
-SSN_REGEX = re.compile(r'^\d{3}-\d{2}-\d{4}$')
-CC_REGEX = re.compile(r'^\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}$')
-EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$')
+from core.pii_classifier import CREDIT_CARD_REGEX as CC_REGEX, EMAIL_REGEX, SSN_REGEX, scan_column
 
 RESERVED_SQL_KEYWORDS = frozenset({
     "select", "from", "where", "drop", "delete", "update", "insert",
@@ -59,12 +57,6 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             else:
                 s_val = str(val).strip()
                 unique_values[col].add(s_val)
-                # Check for critical unmasked PII
-                col_lower = col.lower()
-                if "ssn" in col_lower or SSN_REGEX.match(s_val):
-                    detected_pii.append({"column": col, "type": "SSN", "sample": "***-**-****"})
-                elif "card" in col_lower or CC_REGEX.match(s_val):
-                    detected_pii.append({"column": col, "type": "CREDIT_CARD", "sample": "****-****-****-****"})
 
                 # Collect numeric values for IQR outlier calculations
                 try:
@@ -72,6 +64,23 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
                     numeric_values[col].append(num_val)
                 except (ValueError, TypeError):
                     pass
+
+    # Scan complete columns once so sensitive column names are reported once.
+    for col in all_cols:
+        scan_result = scan_column([row.get(col) for row in records], col)
+        for detection in scan_result["detections"]:
+            subtype = detection["subtype"]
+            if detection["type"] not in {"PII", "SECRET"}:
+                continue
+            sample = {
+                "SSN": "***-**-****",
+                "CREDIT_CARD": "****-****-****-****",
+            }.get(subtype, "[REDACTED]")
+            detected_pii.append({
+                "column": col,
+                "type": subtype,
+                "sample": sample,
+            })
 
     null_ratios = {col: round(null_counts[col] / row_count, 4) for col in all_cols}
     avg_null_ratio = sum(null_ratios.values()) / max(1, column_count)

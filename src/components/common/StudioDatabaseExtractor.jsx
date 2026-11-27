@@ -159,8 +159,8 @@ export default function StudioDatabaseExtractor({
               onChange={(e) => setConnectionUri(e.target.value)}
               placeholder={
                 engine === 'mongodb'
-                  ? 'mongodb+srv://user:password@cluster.mongodb.net/dbname'
-                  : 'postgresql://user:password@host:5432/dbname?sslmode=require'
+                  ? 'mongodb+srv://cluster.mongodb.net/dbname'
+                  : 'postgresql://host:5432/dbname?sslmode=require'
               }
               className="w-full px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-mono text-slate-800 focus:outline-none focus:border-[#2D55F5]"
             />
