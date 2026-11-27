@@ -1144,19 +1144,27 @@ def ask_business_question(
                 },
                 indent=2,
             )
-            resp = llm_client.chat.completions.create(
-                model=llm_deployment,
+            try:
+                from core.llm_gateway import get_llm_gateway
+            except ImportError:
+                from llm_gateway import get_llm_gateway
+            gateway = get_llm_gateway()
+            llm_res = gateway.chat_completion(
                 messages=[
                     {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": user_payload},
                 ],
+                model=llm_deployment,
                 temperature=0.1,
                 max_tokens=700,
+                tenant_id=tid or "default"
             )
-            llm_text = (resp.choices[0].message.content or "").strip()
+            llm_text = (llm_res.content or "").strip()
             if llm_text:
                 final_answer = llm_text
-                engine_used = f"azure-openai:{llm_deployment}"
+                engine_used = f"azure-openai:{llm_res.model}"
+                if llm_res.cached:
+                    engine_used += " (cached)"
         except Exception:
             # Seamless fallback to grounded deterministic explanation
             final_answer = deterministic_answer

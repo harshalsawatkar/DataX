@@ -473,27 +473,27 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     }
     if (norm.includes('azure') || norm.includes('blob')) {
       setSrcDbType('Azure');
-      setSrcHost(import.meta.env.VITE_AZURE_STORAGE_ACCOUNT || import.meta.env.AZURE_STORAGE_ACCOUNT || 'irepazurestorage');
-      setSrcPort(import.meta.env.VITE_AZURE_STORAGE_CONTAINER || import.meta.env.AZURE_STORAGE_CONTAINER || 'telemetry-container');
-      setSrcDbName(import.meta.env.VITE_AZURE_TENANT_ID || import.meta.env.AZURE_TENANT_ID || '');
-      setSrcUser(import.meta.env.VITE_AZURE_CLIENT_ID || import.meta.env.AZURE_CLIENT_ID || '');
-      setSrcPass(import.meta.env.VITE_AZURE_STORAGE_KEY || import.meta.env.AZURE_STORAGE_KEY || '');
+      setSrcHost(import.meta.env.VITE_AZURE_STORAGE_ACCOUNT || 'irepazurestorage');
+      setSrcPort(import.meta.env.VITE_AZURE_STORAGE_CONTAINER || 'telemetry-container');
+      setSrcDbName(import.meta.env.VITE_AZURE_TENANT_ID || '');
+      setSrcUser(import.meta.env.VITE_AZURE_CLIENT_ID || '');
+      setSrcPass(import.meta.env.VITE_AZURE_STORAGE_KEY || '');
       setSrcTable(tableName || 'telemetry_logs.parquet');
     } else if (norm.includes('s3') || norm.includes('aws')) {
       setSrcDbType('AWS S3');
-      setSrcPort(import.meta.env.VITE_AWS_DEFAULT_REGION || import.meta.env.AWS_DEFAULT_REGION || 'us-east-1');
-      setSrcHost(import.meta.env.VITE_AWS_S3_BUCKET_URI || import.meta.env.AWS_S3_BUCKET_URI || 's3://datax-enterprise-lake/raw-landing/');
+      setSrcPort(import.meta.env.VITE_AWS_DEFAULT_REGION || 'us-east-1');
+      setSrcHost(import.meta.env.VITE_AWS_S3_BUCKET_URI || 's3://datax-enterprise-lake/raw-landing/');
       setSrcDbName('Parquet (Snappy)');
-      setSrcUser(import.meta.env.VITE_AWS_ACCESS_KEY_ID || import.meta.env.AWS_ACCESS_KEY_ID || '');
-      setSrcPass(import.meta.env.VITE_AWS_SECRET_ACCESS_KEY || import.meta.env.AWS_SECRET_ACCESS_KEY || '');
+      setSrcUser(import.meta.env.VITE_AWS_ACCESS_KEY_ID || '');
+      setSrcPass(import.meta.env.VITE_AWS_SECRET_ACCESS_KEY || '');
       setSrcTable(tableName || 'orders_2026_q1.parquet');
     } else if (norm.includes('salesforce') || norm.includes('crm')) {
       setSrcDbType('Salesforce');
       setSrcPort('443');
-      setSrcHost(import.meta.env.VITE_SALESFORCE_INSTANCE_URL || import.meta.env.SALESFORCE_INSTANCE_URL || 'login.salesforce.com');
-      setSrcDbName(import.meta.env.VITE_SALESFORCE_CLIENT_ID || import.meta.env.SALESFORCE_CLIENT_ID || '');
-      setSrcUser(import.meta.env.VITE_SALESFORCE_USERNAME || import.meta.env.SALESFORCE_USERNAME || '');
-      setSrcPass(import.meta.env.VITE_SALESFORCE_PASSWORD || import.meta.env.SALESFORCE_PASSWORD || '');
+      setSrcHost(import.meta.env.VITE_SALESFORCE_INSTANCE_URL || 'login.salesforce.com');
+      setSrcDbName(import.meta.env.VITE_SALESFORCE_CLIENT_ID || '');
+      setSrcUser(import.meta.env.VITE_SALESFORCE_USERNAME || '');
+      setSrcPass(import.meta.env.VITE_SALESFORCE_PASSWORD || '');
       setSrcTable(tableName || 'Account');
     } else if (norm.includes('mongo')) {
       setSrcDbType('MongoDB');
@@ -607,19 +607,19 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   const [hitlCustomVal, setHitlCustomVal] = useState('50000');
   const [hitlCustomExpression, setHitlCustomExpression] = useState('TOTAL_AMOUNT > 50000');
   // Pinecone Vector DB states (loaded securely from .env)
-  const [pineconeIndex, setPineconeIndex] = useState(import.meta.env.VITE_PINECONE_INDEX || import.meta.env.PINECONE_INDEX || 'enterprise-knowledge-base');
-  const [pineconeHost, setPineconeHost] = useState(import.meta.env.VITE_PINECONE_HOST || import.meta.env.PINECONE_HOST || '');
-  const [pineconeApiKey, setPineconeApiKey] = useState(import.meta.env.VITE_PINECONE_API_KEY || import.meta.env.PINECONE_API_KEY || '');
-  const [pineconeNamespace, setPineconeNamespace] = useState(import.meta.env.VITE_PINECONE_NAMESPACE || import.meta.env.PINECONE_NAMESPACE || 'production');
-  const [pineconeDimension, setPineconeDimension] = useState(import.meta.env.VITE_PINECONE_DIMENSION || import.meta.env.PINECONE_DIMENSION || '1024');
+  const [pineconeIndex, setPineconeIndex] = useState(import.meta.env.VITE_PINECONE_INDEX || 'enterprise-knowledge-base');
+  const [pineconeHost, setPineconeHost] = useState(import.meta.env.VITE_PINECONE_HOST || '');
+  const [pineconeApiKey, setPineconeApiKey] = useState(import.meta.env.VITE_PINECONE_API_KEY || '');
+  const [pineconeNamespace, setPineconeNamespace] = useState(import.meta.env.VITE_PINECONE_NAMESPACE || 'production');
+  const [pineconeDimension, setPineconeDimension] = useState(import.meta.env.VITE_PINECONE_DIMENSION || '1024');
   const [pineconeMetric, setPineconeMetric] = useState('cosine');
   // Google BigQuery states (loaded securely from .env)
-  const [bqProject, setBqProject] = useState(import.meta.env.VITE_BIGQUERY_PROJECT_ID || import.meta.env.BIGQUERY_PROJECT_ID || '');
-  const [bqDataset, setBqDataset] = useState(import.meta.env.VITE_BIGQUERY_DATASET_ID || import.meta.env.BIGQUERY_DATASET_ID || '');
+  const [bqProject, setBqProject] = useState(import.meta.env.VITE_BIGQUERY_PROJECT_ID || '');
+  const [bqDataset, setBqDataset] = useState(import.meta.env.VITE_BIGQUERY_DATASET_ID || '');
   const [bqTable, setBqTable] = useState('0PUR_C01_clean');
-  const [bqLocation, setBqLocation] = useState(import.meta.env.VITE_BIGQUERY_LOCATION || import.meta.env.BIGQUERY_LOCATION || 'US');
-  const [bqEmail, setBqEmail] = useState(import.meta.env.VITE_BIGQUERY_CLIENT_EMAIL || import.meta.env.BIGQUERY_CLIENT_EMAIL || '');
-  const [bqKeyId, setBqKeyId] = useState(import.meta.env.VITE_BIGQUERY_PRIVATE_KEY_ID || import.meta.env.BIGQUERY_PRIVATE_KEY_ID || '');
+  const [bqLocation, setBqLocation] = useState(import.meta.env.VITE_BIGQUERY_LOCATION || 'US');
+  const [bqEmail, setBqEmail] = useState(import.meta.env.VITE_BIGQUERY_CLIENT_EMAIL || '');
+  const [bqKeyId, setBqKeyId] = useState(import.meta.env.VITE_BIGQUERY_PRIVATE_KEY_ID || '');
   const [bqWriteMode, setBqWriteMode] = useState('append');
   // Target Modal states
   const [tgtDbType, setTgtDbType] = useState('SAP S/4HANA');

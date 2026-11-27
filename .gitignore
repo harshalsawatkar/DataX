@@ -82,6 +82,9 @@ ENV/
 .audit_hash_chain.jsonl
 .runs_store.json
 .fmd_store.json
+data/*
+data/.*
+!data/.gitkeep
 
 # Design Assets & Temporary files
 Designs/
