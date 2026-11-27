@@ -12,7 +12,12 @@ import os
 import sys
 import json
 import time
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+
+try:
+    from ai_substrate.agent_graph import DataXStateGraph
+except ImportError:
+    from backend.ai_substrate.agent_graph import DataXStateGraph
 
 # Enterprise Ontology Knowledge Graph
 ONTOLOGY_GRAPH = {

@@ -2205,20 +2205,27 @@ async def api_v1_embeddings(request: Request):
     model = body.get("model", "text-embedding-3-small")
     inputs = raw_input if isinstance(raw_input, list) else [raw_input]
 
+    try:
+        from ai_substrate.embedder import get_embedder
+    except ImportError:
+        from backend.ai_substrate.embedder import get_embedder
+
+    embedder = get_embedder()
+    vectors = embedder.embed(inputs)
+
     data = []
-    for idx, item in enumerate(inputs):
-        h = hashlib.sha256(str(item).encode("utf-8")).digest()
-        vec = [(float(b) - 128.0) / 128.0 for b in h[:32]]
+    for idx, vec in enumerate(vectors):
         data.append({
             "object": "embedding",
             "index": idx,
-            "embedding": (vec * 4)[:128]
+            "embedding": vec
         })
 
     return {
         "object": "list",
         "data": data,
         "model": model,
+        "dimension": embedder.dimension,
         "usage": {
             "prompt_tokens": sum(len(str(x).split()) for x in inputs),
             "total_tokens": sum(len(str(x).split()) for x in inputs)

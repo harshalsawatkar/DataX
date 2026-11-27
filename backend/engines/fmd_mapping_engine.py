@@ -1106,6 +1106,25 @@ def ask_business_question(
         for row in comparison["consolidated_rows"]
     ]
 
+    # S1-24: Retrieve unstructured reference spec citations via hybrid_store
+    spec_citations = []
+    try:
+        try:
+            from ai_substrate.hybrid_store import get_hybrid_store
+        except ImportError:
+            from backend.ai_substrate.hybrid_store import get_hybrid_store
+        hits = get_hybrid_store().hybrid_search(question, top_k=3, tenant_id=tid)
+        for h in hits:
+            spec_citations.append({
+                "source_type": "REFERENCE_SPEC",
+                "file_name": h.get("source_doc", "Spec.pdf"),
+                "heading_path": h.get("heading_path") or "Design Spec",
+                "excerpt": h.get("content", "")[:250],
+                "rrf_score": h.get("rrf_score", 0.0)
+            })
+    except Exception:
+        pass
+
     # Deterministic grounded executive answer (always available, zero hallucination)
     bullets = []
     for r in comparison["consolidated_rows"]:
@@ -1178,6 +1197,7 @@ def ask_business_question(
         "answer": final_answer,
         "engine": engine_used,
         "citations": citations,
+        "spec_citations": spec_citations,
         "comparison": comparison,
     }
 

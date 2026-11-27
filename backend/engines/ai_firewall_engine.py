@@ -421,6 +421,30 @@ def scan_rag_batch(
     overall_health = round(((verified_count + redacted_count * 0.95) / max(1, total)) * 100, 1)
 
     if persist and (verified_count > 0 or redacted_count > 0):
+        # S1-22: Index VERIFIED / REDACTED_PASS chunks into real hybrid_store
+        clean_chunks_for_vector_store = [
+            {
+                "text": r["sanitizedText"],
+                "source": r["docName"],
+                "metadata": {
+                    "chunkId": r["chunkId"],
+                    "verdict": r["verdict"],
+                    "trustScore": r["trustScore"],
+                    "redactionsCount": r["redactionsCount"]
+                }
+            }
+            for r in results if r["verdict"] in ["VERIFIED", "REDACTED_PASS"]
+        ]
+        if clean_chunks_for_vector_store:
+            try:
+                try:
+                    from ai_substrate.hybrid_store import get_hybrid_store
+                except ImportError:
+                    from backend.ai_substrate.hybrid_store import get_hybrid_store
+                get_hybrid_store().index_document_chunks(clean_chunks_for_vector_store, source_doc="ai_firewall_batch")
+            except Exception as e:
+                print(f"[AI_FIREWALL] Note: Vector store indexing warning: {e}")
+
         try:
             with get_storage_connection(connect_timeout=6) as conn:
                 with conn.cursor() as cur:

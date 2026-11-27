@@ -384,9 +384,21 @@ def process_universal_upload(
             text = raw_bytes.decode("utf-8-sig", errors="replace")
             chunks = [line.strip() for line in text.splitlines() if line.strip()][:200]
 
+        # S1-20: Lift 100-chunk cap up to 2500 with StructureAwareChunker integration
+        try:
+            try:
+                from ai_substrate.chunker import StructureAwareChunker
+            except ImportError:
+                from backend.ai_substrate.chunker import StructureAwareChunker
+            chunker = StructureAwareChunker(max_chunks_limit=2500)
+            structured_chunks = chunker.chunk_markdown("\n\n".join(chunks), filename=clean_name)
+            text_chunk_list = [c.text for c in structured_chunks] if structured_chunks else chunks[:2500]
+        except Exception:
+            text_chunk_list = chunks[:2500]
+
         doc_rows = [
             {"SECTION_INDEX": idx + 1, "SOURCE_FILE": clean_name, "EXTRACTED_TEXT": _neutralize_cell(ch)}
-            for idx, ch in enumerate(chunks[:100])
+            for idx, ch in enumerate(text_chunk_list)
         ]
         sheets = {"Extracted_Text": doc_rows}
         return {
@@ -399,7 +411,7 @@ def process_universal_upload(
             "columns": ["SECTION_INDEX", "SOURCE_FILE", "EXTRACTED_TEXT"],
             "row_count": len(doc_rows),
             "sheet_names": ["Extracted_Text"],
-            "text_chunks": chunks[:100],
+            "text_chunks": text_chunk_list,
         }
 
     raise ValueError(
