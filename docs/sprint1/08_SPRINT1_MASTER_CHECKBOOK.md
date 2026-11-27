@@ -11,7 +11,7 @@
 | Phase | Milestone Name | Plans Covered | Tasks | Status | Completed Date |
 | :---: | :--- | :---: | :---: | :---: | :---: |
 | **0** | Repo Hygiene, Remote Branch Cleanup & VM Deploy Auth | Pre-Sprint | `S1-01` – `S1-05` | ⏳ In Progress (`2/5`) | — |
-| **1** | Cost Circuit Breakers, DPDP PII Spine & Zero-Stub Cleanup | Plans `01, 02, 03` | `S1-06` – `S1-17` | ⬜ Pending | — |
+| **1** | Cost Circuit Breakers, DPDP PII Spine & Zero-Stub Cleanup | Plans `01, 02, 03` | `S1-06` – `S1-17` | ⏳ In Progress (`3/12`) | — |
 | **2** | Shared AI Substrate: Local ONNX Embeddings, `pgvector` Hybrid RAG & LangGraph | Plan `02` | `S1-18` – `S1-26` | ⬜ Pending | — |
 | **3** | 5-Tier Million-Row & Multi-Table Zero-Token Intelligence Engine | Plan `05` | `S1-27` – `S1-36` | ⬜ Pending | — |
 | **4** | Flagship MVP #1: "1-Click DB X-Ray, Safe Clear & Executive Advisor" | Plan `06` | `S1-37` – `S1-46` | ⬜ Pending | — |
@@ -39,11 +39,11 @@
 ## Phase 1 — Cost Protection, DPDP 2025 PII Spine & Zero-Stub Honesty
 *Goal: Guarantee Azure Foundry bills can never spike again, unify PII/security math, and eliminate every fake `Success!` stub (`[Core]` + `[Dev-2: WP-D1]` can run in parallel).*
 
-- [ ] **S1-06** `[Dev-2: WP-D1]` Lock [`vite.config.js`](file:///h:/AAVIL%20Inc/DataX/DataX/vite.config.js#L6) `envPrefix` strictly to `['VITE_']` so `AZURE_*` / `AWS_*` / `PINECONE_*` server env vars never bundle into client JS.  
+- [x] **S1-06** `[Dev-2: WP-D1]` Lock [`vite.config.js`](file:///h:/AAVIL%20Inc/DataX/DataX/vite.config.js#L6) `envPrefix` strictly to `['VITE_']` so `AZURE_*` / `AWS_*` / `PINECONE_*` server env vars never bundle into client JS.  
   *Gate:* `npm run build` succeeds and `Select-String -Path dist\assets\*.js -Pattern "AZURE_OPENAI"` returns 0 matches.
-- [ ] **S1-07** `[Core]` Build centralized **`backend/core/llm_gateway.py`** wrapping all LLM calls with: (a) per-tenant daily token & INR/USD hard cap, (b) `TokenBudgetViolationError` blocking $>25$ calls/request (row-loop guard), and (c) SQLite/Postgres content-addressed prompt cache.  
+- [x] **S1-07** `[Core]` Build centralized **`backend/core/llm_gateway.py`** wrapping all LLM calls with: (a) per-tenant daily token & INR/USD hard cap, (b) `TokenBudgetViolationError` blocking $>25$ calls/request (row-loop guard), and (c) SQLite/Postgres content-addressed prompt cache.  
   *Gate:* `pytest tests/test_llm_gateway.py` verifies cache hit = `0` tokens and 26th loop call trips breaker cleanly.
-- [ ] **S1-08** `[Core]` Route all direct `AzureOpenAI` calls in [`backend/service.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/service.py) and [`backend/engines/fmd_mapping_engine.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/engines/fmd_mapping_engine.py) through `llm_gateway.py` and expose `GET /governance/llm-budget` telemetry.  
+- [x] **S1-08** `[Core]` Route all direct `AzureOpenAI` calls in [`backend/service.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/service.py) and [`backend/engines/fmd_mapping_engine.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/engines/fmd_mapping_engine.py) through `llm_gateway.py` and expose `GET /governance/llm-budget` telemetry.  
   *Gate:* `Select-String -Path backend\**\*.py -Pattern "AzureOpenAI\("` appears ONLY inside `llm_gateway.py`.
 - [ ] **S1-09** `[Dev-2: WP-D1]` Create **`backend/core/pii_classifier.py`** with exact checksum validators: **Aadhaar 12-digit Verhoeff $D_5$**, **PAN**, **GSTIN Modulo-36**, **IFSC**, **UPI VPA**, **+91 Mobile**, **Credit Card Luhn**, **US SSN**, **Email**, and **API Secrets**.  
   *Gate:* `pytest tests/test_pii_classifier.py` passes $\ge 18$ positive & negative checksum tests (0 false positives on 12-digit order IDs).

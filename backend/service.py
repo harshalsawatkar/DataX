@@ -16,7 +16,6 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Depends, Security, Response, Request, Body
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from openai import AzureOpenAI
 import uvicorn
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -43,6 +42,13 @@ for _dir in [
 
 # Resolve the persistent data directory (exports DATAX_VAULT_DIR) before any store-backed module loads
 import paths  # noqa: F401
+from llm_gateway import (  # noqa: F401
+    get_llm_gateway,
+    llm_request_context,
+    TokenBudgetViolationError,
+    DailyBudgetExceededError,
+    LLMUnavailableError,
+)
 
 import auth_engine
 
@@ -191,31 +197,11 @@ app.add_middleware(
 
 
 # -----------------------------------------------------------------------------
-# Azure OpenAI Client Provider
+# Azure OpenAI Client Provider (Centralized via LLM Gateway)
 # -----------------------------------------------------------------------------
 def get_azure_openai_client():
-    env = {}
-    env_file = '/home/azureuserSDH/Production/nexlayer-backend/.env'
-    if os.path.exists(env_file):
-        with open(env_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if '=' in line and not line.startswith('#'):
-                    k, v = line.split('=', 1)
-                    env[k.strip()] = v.strip().replace('"', '').replace("'", "")
-
-    endpoint = os.environ.get('AZURE_OPENAI_ENDPOINT', env.get('AZURE_OPENAI_ENDPOINT'))
-    key = os.environ.get('AZURE_OPENAI_KEY', env.get('AZURE_OPENAI_KEY'))
-    deployment = os.environ.get('AZURE_OPENAI_DEPLOYMENT', env.get('AZURE_OPENAI_DEPLOYMENT', 'gpt-5-mini'))
-
-    if endpoint and key:
-        client = AzureOpenAI(
-            azure_endpoint=endpoint,
-            api_key=key,
-            api_version='2024-08-01-preview'
-        )
-        return client, deployment
-    return None, None
+    """Delegates client discovery & initialization to centralized LLMGateway."""
+    return get_llm_gateway().get_azure_client()
 
 
 # -----------------------------------------------------------------------------
@@ -808,6 +794,21 @@ def api_sso_login(email: str, idp: str = "azure_ad"):
         raise HTTPException(status_code=403, detail=str(pe))
 
 
+
+@app.get("/governance/llm-budget")
+@app.get("/api/governance/llm-budget")
+def api_get_llm_budget(tenant_id: str = "default"):
+    """
+    Exposes live LLM budget consumption, per-tenant daily token & INR spend,
+    row-loop limits, and prompt cache hit telemetry (Sprint 1 - S1-08).
+    """
+    gateway = get_llm_gateway()
+    return {
+        "success": True,
+        "telemetry": gateway.get_budget_status(tenant_id=tenant_id)
+    }
+
+
 @app.get("/tenants/{tenant_id}/users")
 def api_get_tenant_users(tenant_id: str, user: Dict[str, Any] = Depends(get_current_user)):
     """P0: Returns users in tenant workspace."""
@@ -1129,18 +1130,21 @@ Baseline Draft: {profile_result.get('draftedPrompt')}
 
 Return ONLY the natural-language validation prompt text (no markdown, no quotes, no preamble)."""
 
-            res = openai_breaker.call(
-                lambda: client.chat.completions.create(
-                    model=deployment,
+            gateway = get_llm_gateway()
+            llm_res = openai_breaker.call(
+                lambda: gateway.chat_completion(
                     messages=[{"role": "user", "content": prompt_msg}],
-                    max_completion_tokens=350,
+                    model=deployment,
+                    max_tokens=350,
+                    tenant_id="default",
                     timeout=7.0
                 )
             )
-            ai_draft = (res.choices[0].message.content or "").strip().strip('"')
+            ai_draft = (llm_res.content or "").strip().strip('"')
             if len(ai_draft) > 20:
                 profile_result["draftedPrompt"] = ai_draft
-                profile_result["engine"] = f"Azure OpenAI ({deployment})"
+                profile_result["engine"] = f"Azure OpenAI ({llm_res.model})"
+                profile_result["cached"] = llm_res.cached
                 return {"success": True, **profile_result}
         except Exception as e:
             print(f"[AI PROMPT DRAFTER] Using deterministic deep profiler draft: {e}")
@@ -1238,21 +1242,24 @@ User Business Constraints / Prompt: {req.prompt}
 
 Generate strict enterprise validation rules tailored to these exact columns and the user's prompt."""
 
-    # REL-01 & REL-02: Exponential backoff with jitter and circuit breaker protection
+    # REL-01 & REL-02: Exponential backoff with jitter and circuit breaker protection via LLM Gateway
+    gateway = get_llm_gateway()
+
     @retry_with_backoff(max_retries=2, base_delay=1.0, max_delay=4.0, jitter=True)
     def _call_openai_with_retry():
         return openai_breaker.call(
-            lambda: client.chat.completions.create(
-                model=deployment,
+            lambda: gateway.chat_completion(
                 messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
-                max_completion_tokens=2500,
+                model=deployment,
+                max_tokens=2500,
+                tenant_id="default",
                 timeout=12.0
             )
         )
 
     try:
-        res = _call_openai_with_retry()
-        raw_text = res.choices[0].message.content.strip()
+        llm_res = _call_openai_with_retry()
+        raw_text = llm_res.content.strip()
         match = re.search(r'\[\s*\{.*\}\s*\]', raw_text, re.DOTALL)
         json_str = match.group(0) if match else raw_text.replace("```json", "").replace("```", "").strip()
 
@@ -1269,11 +1276,12 @@ Generate strict enterprise validation rules tailored to these exact columns and 
 
         return {
             "success": True,
-            "engine": f"Azure OpenAI ({deployment})",
+            "engine": f"Azure OpenAI ({llm_res.model})",
             "table": req.tableName,
             "rules": rules,
             "count": len(rules),
             "fallback_used": False,
+            "cached": llm_res.cached,
             "circuit_breaker": openai_breaker.get_status()
         }
     except Exception as e:

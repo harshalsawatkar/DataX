@@ -11,16 +11,16 @@ import { Database, Key, CheckCircle2, RefreshCw, Layers, Info } from 'lucide-rea
 export default function PineconeModalPanel({
   // Only auto-fill from .env — no hardcoded fallbacks for credential/identity fields.
   // Empty string means the field shows its placeholder and stays blank until the user types.
-  indexName = import.meta.env.VITE_PINECONE_INDEX || import.meta.env.PINECONE_INDEX || '',
+  indexName = import.meta.env.VITE_PINECONE_INDEX || '',
   onIndexNameChange,
-  host = import.meta.env.VITE_PINECONE_HOST || import.meta.env.PINECONE_HOST || '',
+  host = import.meta.env.VITE_PINECONE_HOST || '',
   onHostChange,
-  apiKey = import.meta.env.VITE_PINECONE_API_KEY || import.meta.env.PINECONE_API_KEY || '',
+  apiKey = import.meta.env.VITE_PINECONE_API_KEY || '',
   onApiKeyChange,
-  namespace = import.meta.env.VITE_PINECONE_NAMESPACE || import.meta.env.PINECONE_NAMESPACE || '',
+  namespace = import.meta.env.VITE_PINECONE_NAMESPACE || '',
   onNamespaceChange,
   // dimension has a sensible technical default (not a credential)
-  dimension = import.meta.env.VITE_PINECONE_DIMENSION || import.meta.env.PINECONE_DIMENSION || '1024',
+  dimension = import.meta.env.VITE_PINECONE_DIMENSION || '1024',
   onDimensionChange,
   metric = 'cosine',
   onMetricChange,
