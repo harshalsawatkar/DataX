@@ -20,8 +20,6 @@ out
 .output
 
 # Local Environment Variables & Secrets
-.env
-.env.*
 !.env.example
 .env*.local
 .env.development.local

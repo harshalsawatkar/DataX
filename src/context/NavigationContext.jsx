@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const SCREEN_TITLES = {
-  threads: 'Workflows & Threads',
-  workflows: 'Workflows & Threads',
+  threads: 'Workflows',
+  workflows: 'Workflows',
   'new-workflow': 'New Autonomous Workflow',
   'new-thread': 'New Autonomous Workflow',
+  'start-workflow': 'New Autonomous Workflow',
+  'start-thread': 'New Autonomous Workflow',
   templates: 'Domain Packs & Templates',
   'domain-packs': 'Domain Packs & Templates',
   connections: 'Enterprise Data Vault & Connectors',
@@ -43,11 +45,14 @@ const SCREEN_TITLES = {
 const NavigationContext = createContext(null);
 const SCREEN_ALIASES = {
   'migration-studio': 'mapping-studio',
+  threads: 'workflows',
+  'start-thread': 'start-workflow',
+  'new-thread': 'new-workflow',
 };
 
 const normalizeScreen = (screen) => SCREEN_ALIASES[screen] || screen;
 
-export function resolveScreenFromLocation(fallback = 'threads') {
+export function resolveScreenFromLocation(fallback = 'workflows') {
   if (typeof window === 'undefined') return fallback;
 
   // 1. Check hash first (e.g. #settings, #ai-firewall, #history, #canvas?trace=...)
@@ -78,7 +83,7 @@ export function resolveScreenFromLocation(fallback = 'threads') {
 
 export const CANVAS_SCREENS = ['canvas', 'builder', 'workflow-builder'];
 
-export function NavigationProvider({ children, initialScreen = 'threads' }) {
+export function NavigationProvider({ children, initialScreen = 'workflows' }) {
   const [currentScreen, setCurrentScreen] = useState(() => resolveScreenFromLocation(initialScreen));
   const [canvasAction, setCanvasAction] = useState(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
@@ -114,15 +119,15 @@ export function NavigationProvider({ children, initialScreen = 'threads' }) {
   // Dynamic Document Title Sync
   useEffect(() => {
     const cleanKey = currentScreen.toLowerCase();
-    const title = SCREEN_TITLES[cleanKey] || 'Enterprise Decision Intelligence';
+    const title = SCREEN_TITLES[cleanKey] || 'Enterprise Data Quality & Governance';
     document.title = `DataX | ${title}`;
   }, [currentScreen]);
 
   const navigateTo = (screen) => {
     const rawClean = screen.replace('#', '').replace(/^\/+/, '').split('?')[0];
     const clean = normalizeScreen ? normalizeScreen(rawClean) : rawClean;
-    setCurrentScreen(clean || 'threads');
-    window.location.hash = `#${clean || 'threads'}`;
+    setCurrentScreen(clean || 'workflows');
+    window.location.hash = `#${clean || 'workflows'}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -147,11 +152,11 @@ export function useNavigation() {
   const context = useContext(NavigationContext);
   if (!context) {
     return {
-      currentScreen: 'threads',
+      currentScreen: 'workflows',
       isOnline: true,
       navigateTo: (to) => {
         const clean = to.replace('#', '').replace(/^\/+/, '');
-        window.location.hash = `#${clean || 'threads'}`;
+        window.location.hash = `#${clean || 'workflows'}`;
       },
     };
   }

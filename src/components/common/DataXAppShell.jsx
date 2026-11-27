@@ -235,7 +235,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
               <span className="font-bold text-[#0A0F1F] dark:text-white text-base tracking-tight">DataX</span>
             </button>
 
-            {/* Segmented Pill Navigation: Threads, Domain packs, Connections, Runs */}
+            {/* Segmented Pill Navigation: Workflows, Domain packs, Connections, Runs */}
             {!isCanvasScreen && <div className="hidden md:inline-flex items-center bg-[#F2F4F7] dark:bg-white/[0.06] p-1 rounded-full text-xs font-medium">
               <button
                 type="button"
@@ -247,7 +247,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
                 }`}
               >
                 <GitBranch className="w-3.5 h-3.5" />
-                <span>Threads</span>
+                <span>Workflows</span>
               </button>
 
               <button
@@ -340,7 +340,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
           <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             {/* Search Input Bar */}
             <div className={isCanvasScreen ? 'hidden lg:block lg:w-44 xl:w-64' : 'w-56 sm:w-64 lg:w-72'}>
-              <HeaderSearchBar placeholder={isCanvasScreen ? 'Search workflows, rules...' : 'Search threads, tables...'} />
+              <HeaderSearchBar placeholder={isCanvasScreen ? 'Search workflows, rules...' : 'Search workflows, tables...'} />
             </div>
 
             {/* Navigation & Filter Dropdown Trigger Button */}
@@ -397,7 +397,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
           {showNewWorkflow && (
             <button
               type="button"
-              onClick={() => navigateTo(isCanvasScreen ? 'start-thread?from=canvas' : 'start-thread')}
+              onClick={() => navigateTo(isCanvasScreen ? 'start-workflow?from=canvas' : 'start-workflow')}
               className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#2D55F5] px-3 text-xs font-semibold text-white hover:bg-[#2045DC] sm:px-4"
             >
               <Plus aria-hidden="true" className="size-4" />

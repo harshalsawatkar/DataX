@@ -290,7 +290,7 @@ export default function RulesPage({ onSwitchToMarketing } = {}) {
     setSaveStatus('saving...');
     setTimeout(() => {
       setSaveStatus('saved just now');
-      showToast('Thread configuration saved!');
+      showToast('Workflow configuration saved!');
     }, 400);
   };
 

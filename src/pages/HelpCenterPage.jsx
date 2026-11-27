@@ -52,7 +52,7 @@ Key points:
     category: 'Business Continuity',
     title: 'Automated Snapshots, RPO, and RTO Objectives',
     summary: 'DataX achieves an RPO of < 15 minutes and tested RTO restore latency of under 2 seconds.',
-    content: `Point-in-time snapshot tarballs package threads, run metrics, encrypted credentials, and DLQ state.
+    content: `Point-in-time snapshot tarballs package workflows, run metrics, encrypted credentials, and DLQ state.
 - Automated snapshots run periodically and are verifiable on-demand.
 - In-place restores guarantee roundtrip SHA-256 integrity.`
   }

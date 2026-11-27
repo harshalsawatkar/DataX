@@ -255,10 +255,10 @@ export default function StartThreadModal({ isOpen, onClose }) {
             </div>
             <div>
               <span className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                New thread
+                New workflow
               </span>
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight leading-tight">
-                Start a thread
+                Start a workflow
               </h2>
             </div>
           </div>
@@ -277,10 +277,10 @@ export default function StartThreadModal({ isOpen, onClose }) {
         ===================================================================== */}
         <div className="px-5 sm:px-6 py-4 overflow-y-auto space-y-3.5">
           
-          {/* Thread name input */}
+          {/* Workflow name input */}
           <div className="space-y-1">
             <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-              Thread name
+              Workflow name
             </label>
             <input
               type="text"
@@ -408,7 +408,7 @@ export default function StartThreadModal({ isOpen, onClose }) {
               onClick={handleCreateThread}
               className="bg-[#2D55F5] hover:bg-[#2045DC] text-white px-4 py-2 rounded-xl font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
             >
-              <span>Create thread</span>
+              <span>Create workflow</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

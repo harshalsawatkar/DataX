@@ -1,7 +1,7 @@
 import React from 'react';
 import { IconAdvisor } from '../icons';
 
-export default function WorkflowsHeader({ onOpenAdvisor }) {
+export default function WorkflowsHeader({ onNewWorkflow, onOpenAdvisor }) {
   return (
     <header className="-mx-6 sm:-mx-8">
     <div className="bg-white border-b dark:bg-[#18181C] py-6 px-6 sm:px-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -24,7 +24,14 @@ export default function WorkflowsHeader({ onOpenAdvisor }) {
           <span>Use case advisor</span>
         </button>
 
-
+        <button
+          type="button"
+          onClick={onNewWorkflow}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#2D55F5] hover:bg-[#2045DC] text-white text-sm font-semibold shadow-xs hover:shadow-sm transition-all cursor-pointer"
+        >
+          <span className="text-base leading-none font-normal">+</span>
+          <span>New workflow</span>
+        </button>
       </div>
     </div>
     </header>

@@ -86,9 +86,10 @@ export default function ThreadsPage({ onOpenLegacyPoc, onSwitchToMarketing } = {
     <DataXAppShell onSwitchToMarketing={onSwitchToMarketing}>
       <div className="max-w-[1440px] mx-auto px-6 sm:px-8 py-8 space-y-8 font-sans">
         
-        {/* 1. Page Header: Title, Subtitle & + New thread CTA matching Screenshot */}
+        {/* 1. Page Header: Title, Subtitle & + New workflow CTA matching Screenshot */}
         <WorkflowsHeader 
           onOpenAdvisor={() => setAdvisorOpen(true)} 
+          onNewWorkflow={() => navigateTo('start-workflow')}
         />
 
         {/* 2. Hero Dark Banner with exact background gradient and metrics matching Screenshot */}
@@ -111,7 +112,7 @@ export default function ThreadsPage({ onOpenLegacyPoc, onSwitchToMarketing } = {
           onOpenAdvisor={() => setAdvisorOpen(true)}
         />
 
-        <CreateCustomWorkflowCard onOpenCanvas={() => navigateTo('start-thread')} />
+        <CreateCustomWorkflowCard onOpenCanvas={() => navigateTo('start-workflow')} />
         </>}
         <section className={filter === 'all' ? 'overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md dark:bg-[#18181C]' : 'space-y-6'}>
         {/* 3. Search & Segmented Filter Bar directly below banner matching Screenshot */}
@@ -133,7 +134,7 @@ export default function ThreadsPage({ onOpenLegacyPoc, onSwitchToMarketing } = {
               setFilter('draft');
               setSearch('');
             }}
-            onNewWorkflow={() => navigateTo('start-thread')}
+            onNewWorkflow={() => navigateTo('start-workflow')}
           />
         ) : (
           <div className="divide-y divide-slate-200">

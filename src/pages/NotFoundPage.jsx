@@ -52,7 +52,7 @@ export default function NotFoundPage({ attemptedScreen, onSwitchToMarketing }) {
               Suggested Enterprise Routes
             </div>
             <ul className="text-xs text-slate-400 space-y-1.5 font-mono">
-              <li>• <button onClick={() => navigateTo('threads')} className="text-indigo-400 hover:underline">#/threads</button> — Active Pipeline Workflows</li>
+              <li>• <button onClick={() => navigateTo('workflows')} className="text-indigo-400 hover:underline">#/workflows</button> — Active Pipeline Workflows</li>
               <li>• <button onClick={() => navigateTo('canvas')} className="text-indigo-400 hover:underline">#/canvas</button> — Interactive CleanFlow Canvas</li>
               <li>• <button onClick={() => navigateTo('quarantine')} className="text-indigo-400 hover:underline">#/quarantine</button> — Audit Quarantine Workbench</li>
               <li>• <button onClick={() => navigateTo('history')} className="text-indigo-400 hover:underline">#/runs</button> — Execution Run History</li>
@@ -62,7 +62,7 @@ export default function NotFoundPage({ attemptedScreen, onSwitchToMarketing }) {
 
           <div className="flex items-center justify-center gap-3 pt-2">
             <button
-              onClick={() => navigateTo('threads')}
+              onClick={() => navigateTo('workflows')}
               className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-all cursor-pointer flex items-center gap-2"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
