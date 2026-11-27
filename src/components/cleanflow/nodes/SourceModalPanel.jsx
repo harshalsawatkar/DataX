@@ -1,0 +1,782 @@
+import React, { useState } from 'react';
+import {
+  Upload,
+  Plus,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Check,
+  AlertTriangle,
+  RefreshCw,
+  Table,
+  Loader2,
+  Database,
+  FileSpreadsheet,
+  ArrowRight,
+  Download,
+} from 'lucide-react';
+import { getTableCatalog } from '../../../data/sampleDatasets';
+import { fmdApi } from '../../../services/apiClient';
+
+export default function SourceModalPanel({
+  selectedNode,
+  connectMethod,
+  setConnectMethod,
+  handleFileUpload,
+  uploadedFileMeta,
+  uploadedCols,
+  uploadedWorkbookSheets = {},
+  activeExcelSheet = '',
+  onSelectExcelSheet,
+  uploadedRawBase64 = '',
+  onNavigateToMappingStudio,
+  srcDbType,
+  applyEngineCredentials,
+  srcHost,
+  setSrcHost,
+  srcPort,
+  setSrcPort,
+  srcDbName,
+  setSrcDbName,
+  srcUser,
+  setSrcUser,
+  srcPass,
+  setSrcPass,
+  showPassword,
+  setShowPassword,
+  connString,
+  setConnString,
+  showConnString,
+  setShowConnString,
+  readScope,
+  setReadScope,
+  srcTable,
+  setSrcTable,
+  srcTestMeta,
+  srcTesting,
+  handleTestSourceConnection,
+  activeEngineKey,
+  discoveredColumns,
+  previewRows,
+  isSamplingLive,
+  isLiveSampleActive,
+}) {
+  const hasLiveTables = Boolean(srcTestMeta?.success && Array.isArray(srcTestMeta?.tables) && srcTestMeta.tables.length > 0);
+  const [syncingFmd, setSyncingFmd] = useState(false);
+  const [syncNotice, setSyncNotice] = useState('');
+  const sheetNames = Object.keys(uploadedWorkbookSheets || {});
+
+  const handleSyncToFmdStudio = async () => {
+    if (!uploadedFileMeta?.name || !uploadedRawBase64) {
+      if (onNavigateToMappingStudio) onNavigateToMappingStudio();
+      return;
+    }
+    setSyncingFmd(true);
+    setSyncNotice('');
+    try {
+      if (uploadedFileMeta.isFmd) {
+        await fmdApi.uploadFmd({ fileName: uploadedFileMeta.name, contentBase64: uploadedRawBase64 });
+      } else {
+        await fmdApi.uploadSource({ fileName: uploadedFileMeta.name, contentBase64: uploadedRawBase64 });
+      }
+      setSyncNotice('Synced to Schema & Migration Studio');
+      if (onNavigateToMappingStudio) onNavigateToMappingStudio();
+    } catch (err) {
+      setSyncNotice(`Sync failed: ${err.message}`);
+    } finally {
+      setSyncingFmd(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-3 rounded-full bg-slate-100 p-1 text-xs font-medium">
+        {[['host', 'Host & credentials'], ['string', 'Connection URI'], ['upload', 'Upload file']].map(([value, label]) =>
+          <button key={value} type="button" aria-pressed={connectMethod === value} onClick={() => setConnectMethod(value)}
+            className={`rounded-full px-1 py-1.5 ${connectMethod === value ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'}`}>{label}</button>)}
+      </div>
+
+      {connectMethod === 'upload' ? (
+        /* BYO FILE INGESTION DROPZONE */
+        <div className="space-y-4 p-5 bg-gradient-to-br from-blue-50/50 via-slate-50 to-indigo-50/30 rounded-2xl border-2 border-dashed border-blue-300/80 hover:border-blue-500 transition-all">
+          <div className="text-center py-4">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center shadow-xs">
+              <Upload className="w-7 h-7" />
+            </div>
+            <h4 className="text-sm font-bold text-slate-800 mb-1">
+              Drop your CSV, Excel (.xlsx/.xls), or JSON dataset
+            </h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
+              Upload client or prospect data on the fly. DataX will infer schema columns, bind them directly into the canvas DAG, and run Safe 3-Tier remediation.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg cursor-pointer transition-all">
+                <Plus className="w-4 h-4" />
+                <span>Browse Local Excel / CSV File</span>
+                <input
+                  type="file"
+                  accept=".csv, .xlsx, .xls, .json"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+              <a
+                href={fmdApi.getDemoDownloadUrl('all_zip')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold transition-all"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>Sample TIME R3.2 Excel Pack (.zip)</span>
+              </a>
+            </div>
+          </div>
+          {uploadedFileMeta && (
+            <div className="space-y-3">
+              <div className="p-3.5 bg-white rounded-xl border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center font-bold text-sm">
+                    {uploadedFileMeta.isFmd ? (
+                      <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-bold text-slate-800">{uploadedFileMeta.name}</p>
+                      {uploadedFileMeta.isFmd && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#D4FF3A] text-[#0A0F1F]">
+                          FMD Multi-Tab Detected (Row {uploadedFileMeta.headerRow || 2} Header)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {uploadedFileMeta.count ? `${uploadedFileMeta.count.toLocaleString()} rows parsed` : uploadedFileMeta.size}
+                      {sheetNames.length > 1 ? ` · ${sheetNames.length} Excel tabs` : ''}
+                      {` · ${uploadedCols.length} columns`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSyncToFmdStudio}
+                    disabled={syncingFmd}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0A0F1F] hover:bg-slate-800 text-white text-[11px] font-semibold cursor-pointer transition-colors"
+                  >
+                    {syncingFmd ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5 text-[#D4FF3A]" />}
+                    <span>Open in FMD Studio</span>
+                  </button>
+                </div>
+              </div>
+
+              {syncNotice && (
+                <p className="text-[11px] font-medium text-emerald-700 px-1">{syncNotice}</p>
+              )}
+
+              {/* Multi-Tab Excel Sheet Switcher */}
+              {sheetNames.length > 1 && (
+                <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                      Excel Workbook Tabs ({sheetNames.length})
+                    </span>
+                    <span className="text-[10px] text-slate-500">Click any tab to bind &amp; preview</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {sheetNames.map((sName) => {
+                      const isActive = sName === activeExcelSheet;
+                      const tabInfo = uploadedWorkbookSheets[sName];
+                      return (
+                        <button
+                          key={sName}
+                          type="button"
+                          onClick={() => onSelectExcelSheet && onSelectExcelSheet(sName)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
+                            isActive
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-blue-300'
+                          }`}
+                        >
+                          {sName} ({tabInfo?.records?.length || 0})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Compact Sheet Preview Table */}
+              {previewRows && previewRows.length > 0 && (
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="overflow-x-auto max-h-48">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead>
+                        <tr className={uploadedFileMeta.isFmd ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-700'}>
+                          {uploadedCols.slice(0, 8).map((col) => (
+                            <th key={col} className="px-2.5 py-1.5 font-bold whitespace-nowrap border-r border-white/15">
+                              {col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {previewRows.slice(0, 5).map((row, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            {uploadedCols.slice(0, 8).map((col) => (
+                              <td key={col} className="px-2.5 py-1.5 text-slate-700 whitespace-nowrap max-w-[160px] truncate">
+                                {String(row[col] ?? '')}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Database Engine Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Database Engine</label>
+            <select
+              value={srcDbType}
+              onChange={(e) => applyEngineCredentials(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 cursor-pointer"
+            >
+              <option value="SAP BW">SAP BW InfoCube (HANA Cloud)</option>
+              <option value="PostgreSQL">PostgreSQL Database</option>
+              <option value="MongoDB">MongoDB Atlas (NoSQL Document Store)</option>
+              <option value="Snowflake">Snowflake Data Cloud</option>
+              <option value="Azure">Azure Blob Storage</option>
+              <option value="Salesforce">Salesforce CRM</option>
+              <option value="AWS S3">AWS S3 Storage</option>
+            </select>
+          </div>
+
+          {/* Tailored Configuration Form based on System Engine */}
+          {connectMethod === 'host' ? (
+            srcDbType === 'AWS S3' ? (
+              <div className="space-y-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">S3 Bucket URI</label>
+                    <input
+                      type="text"
+                      value={srcHost}
+                      onChange={(e) => setSrcHost(e.target.value)}
+                      placeholder="s3://datax-enterprise-lake/raw-landing/"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">AWS Region</label>
+                    <input
+                      type="text"
+                      value={srcPort}
+                      onChange={(e) => setSrcPort(e.target.value)}
+                      placeholder="us-east-1"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">AWS Access Key ID</label>
+                  <input
+                    type="text"
+                    value={srcUser}
+                    onChange={(e) => setSrcUser(e.target.value)}
+                    placeholder="Enter AWS access key ID"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold text-slate-600">AWS Secret Access Key</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={srcPass}
+                    onChange={(e) => setSrcPass(e.target.value)}
+                    placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">File Format / Storage Class</label>
+                  <input
+                    type="text"
+                    value={srcDbName}
+                    onChange={(e) => setSrcDbName(e.target.value)}
+                    placeholder="Parquet (Snappy) / Delta Lake"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                  />
+                </div>
+              </div>
+            ) : srcDbType === 'Azure' ? (
+              <div className="space-y-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Storage Account Name</label>
+                    <input
+                      type="text"
+                      value={srcHost}
+                      onChange={(e) => setSrcHost(e.target.value)}
+                      placeholder="irepazurestorage"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Container Name</label>
+                    <input
+                      type="text"
+                      value={srcPort}
+                      onChange={(e) => setSrcPort(e.target.value)}
+                      placeholder="telemetry-container"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Microsoft Entra Tenant ID</label>
+                  <input
+                    type="text"
+                    value={srcDbName}
+                    onChange={(e) => setSrcDbName(e.target.value)}
+                    placeholder="377abd4b-5fbc-4ac2-9b30-f3c03892d087"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Client ID (App ID)</label>
+                    <input
+                      type="text"
+                      value={srcUser}
+                      onChange={(e) => setSrcUser(e.target.value)}
+                      placeholder="f366a6c8-ae64-4d0b-87cd-dc8fd919997a"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-semibold text-slate-600">Client Secret</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        {showPassword ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={srcPass}
+                      onChange={(e) => setSrcPass(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : srcDbType === 'Salesforce' ? (
+              <div className="space-y-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Salesforce Instance URL</label>
+                  <input
+                    type="text"
+                    value={srcHost}
+                    onChange={(e) => setSrcHost(e.target.value)}
+                    placeholder="sweetdesignhub.my.salesforce.com"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Client ID / Consumer Key</label>
+                    <input
+                      type="text"
+                      value={srcDbName}
+                      onChange={(e) => setSrcDbName(e.target.value)}
+                      placeholder="3MVG9f366a6c84d0b87cddc8fd919997a"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Username / Email</label>
+                    <input
+                      type="text"
+                      value={srcUser}
+                      onChange={(e) => setSrcUser(e.target.value)}
+                      placeholder="sweetdesignhub@gmail.com"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold text-slate-600">Client Secret / Security Token</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={srcPass}
+                    onChange={(e) => setSrcPass(e.target.value)}
+                    placeholder="••••••••••••••••"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                  />
+                </div>
+              </div>
+            ) : (
+              /* DEFAULT DATABASE FORM (SAP, POSTGRES, MONGO, SNOWFLAKE) */
+              <div className="space-y-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Host / Server (or Full URI)</label>
+                    <input
+                      type="text"
+                      value={srcHost}
+                      onChange={(e) => setSrcHost(e.target.value)}
+                      placeholder="cluster0.tb6bhff.mongodb.net"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Port</label>
+                    <input
+                      type="text"
+                      value={srcPort}
+                      onChange={(e) => setSrcPort(e.target.value)}
+                      placeholder="27017"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Database Name</label>
+                    <input
+                      type="text"
+                      value={srcDbName}
+                      onChange={(e) => setSrcDbName(e.target.value)}
+                      placeholder="datax_staging"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Username / User</label>
+                    <input
+                      type="text"
+                      value={srcUser}
+                      onChange={(e) => setSrcUser(e.target.value)}
+                      placeholder="harshal"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold text-slate-600">Password / Secret</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={srcPass}
+                    onChange={(e) => setSrcPass(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+                  />
+                </div>
+              </div>
+            )
+          ) : (
+            /* Mode 2: Connection URI String */
+            <div className="space-y-2 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-semibold text-slate-600">Connection URI String</label>
+                <button
+                  type="button"
+                  onClick={() => setShowConnString(!showConnString)}
+                  className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  {showConnString ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  {showConnString ? 'Mask URI' : 'Reveal URI'}
+                </button>
+              </div>
+              <textarea
+                rows={2}
+                value={connString}
+                onChange={(e) => setConnString(e.target.value)}
+                placeholder="mongodb+srv://cluster0.mongodb.net/ or postgresql://user:pass@host/db"
+                className="w-full p-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
+              />
+            </div>
+          )}
+
+          {/* Test Connection Button with Live Ping Diagnostics */}
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-slate-800 block">
+                {srcDbType === 'AWS S3'
+                  ? 'AWS S3 Bucket Connectivity'
+                  : srcDbType === 'Azure'
+                    ? 'Azure Blob Connectivity'
+                    : srcDbType === 'Salesforce'
+                      ? 'Salesforce API Connectivity'
+                      : 'Database Connectivity'}
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Pings endpoint & discovers live collections/tables
+              </span>
+            </div>
+            <div className="min-w-0 flex items-center gap-2.5">
+              {srcTestMeta && srcTestMeta.nodeId === selectedNode.id && srcTestMeta.success && (
+                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-2xs animate-in fade-in">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  Connected ({srcTestMeta.latencyMs}ms)
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleTestSourceConnection}
+                disabled={srcTesting}
+                className="shrink-0 whitespace-nowrap px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${srcTesting ? 'animate-spin' : ''}`} />
+                {srcTesting ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
+          </div>
+
+          {/* Read Scope Options */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-slate-700">Read scope</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div
+                onClick={() => setReadScope('selected')}
+                className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  readScope === 'selected'
+                    ? 'bg-blue-50 border-blue-300 text-blue-900 font-bold'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span className="block text-xs">Specific Table(s)</span>
+                <span className="block text-[10px] text-slate-400 font-normal">Designate specific table for stream</span>
+              </div>
+              <div
+                onClick={() => setReadScope('all')}
+                className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  readScope === 'all'
+                    ? 'bg-blue-50 border-blue-300 text-blue-900 font-bold'
+                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span className="block text-xs">Full Schema</span>
+                <span className="block text-[10px] text-slate-400 font-normal">Batch sync all discovered tables</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Table / Object / Blob Catalog */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                {srcDbType === 'AWS S3' || srcDbType === 'Azure'
+                  ? 'Designated Object / Blob File'
+                  : srcDbType === 'Salesforce'
+                    ? 'Designated Salesforce Object'
+                    : 'Designated Source Table / Collection'}
+              </label>
+              {hasLiveTables ? (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <Database className="w-3 h-3 text-emerald-600" />
+                  ⚡ {srcTestMeta.tables.length} Live Tables ({srcTestMeta.database || srcDbName || 'Connected'})
+                </span>
+              ) : (
+                <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                  📦 Demo Sandbox Tables Active
+                </span>
+              )}
+            </div>
+
+            {/* Quick-Select Live Table Pills when connected */}
+            {hasLiveTables && (
+              <div className="mb-2.5 p-2.5 bg-emerald-50/50 border border-emerald-200/80 rounded-xl">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800 mb-1.5">
+                  Select Table / Collection from Original Database:
+                </span>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {srcTestMeta.tables.map((tbl) => {
+                    const isSelected = srcTable === tbl;
+                    return (
+                      <button
+                        key={tbl}
+                        type="button"
+                        onClick={() => setSrcTable(tbl)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-emerald-200 hover:bg-emerald-100/60'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3" />}
+                        <span>{tbl}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <select
+              value={srcTable}
+              onChange={(e) => setSrcTable(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 cursor-pointer"
+            >
+              {hasLiveTables && (
+                <optgroup label="⚡ Live Discovered Tables (From Connected Database)">
+                  {srcTestMeta.tables.map((tbl) => (
+                    <option key={tbl} value={tbl}>
+                      [Live DB] {tbl}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="📦 Pre-Loaded Demo Tables (Sandbox Testing & Prototyping)">
+                {getTableCatalog(activeEngineKey).map((t) => (
+                  <option key={t.name} value={t.name}>
+                    [Demo Table] {t.name} — ({t.rows})
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {hasLiveTables
+                ? `✅ Live connection active. Selecting any table above fetches real rows and schema columns directly from '${srcTestMeta.database || srcDbName}'.`
+                : 'ℹ️ Click "Test Connection" above to discover and select live tables from your original database.'}
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* Discovered Schema Columns Pill Badges */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="block text-xs font-bold text-slate-700">
+            Discovered Schema Columns ({discoveredColumns.length})
+          </label>
+          {isSamplingLive && (
+            <span className="text-[10px] font-semibold text-blue-600 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Fetching live schema...
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          {discoveredColumns.length > 0 ? (
+            discoveredColumns.map((col, idx) => (
+              <span
+                key={idx}
+                className="font-mono text-[10px] font-bold bg-white text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md shadow-2xs"
+              >
+                {col}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-slate-400 italic">No columns discovered yet</span>
+          )}
+        </div>
+      </div>
+
+      {/* Live 5-Row Data Preview Table */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+            <Table className="w-3.5 h-3.5 text-blue-600" />
+            <span>Live Data Preview (First 5 Rows — {srcTable})</span>
+          </label>
+          {isLiveSampleActive ? (
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              ⚡ Live Database Stream
+            </span>
+          ) : (
+            <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+              Sandbox Preview
+            </span>
+          )}
+        </div>
+        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white max-h-52 overflow-y-auto">
+          {isSamplingLive ? (
+            <div className="py-8 flex flex-col items-center justify-center text-slate-500 gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+              <span className="text-xs font-medium">Sampling live records from {srcTable}...</span>
+            </div>
+          ) : previewRows.length > 0 ? (
+            <table className="w-full text-left text-[11px] font-mono">
+              <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
+                <tr>
+                  {discoveredColumns.slice(0, 7).map((c, i) => (
+                    <th key={i} className="px-2.5 py-1.5 font-bold text-slate-600 whitespace-nowrap">
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {previewRows.slice(0, 5).map((row, rIdx) => (
+                  <tr key={rIdx} className="hover:bg-slate-50/80">
+                    {discoveredColumns.slice(0, 7).map((colKey, cIdx) => {
+                      const val = row[colKey];
+                      const isNull = val === null || val === undefined || val === '';
+                      return (
+                        <td
+                          key={cIdx}
+                          className={`px-2.5 py-1.5 whitespace-nowrap ${
+                            isNull ? 'text-rose-500 font-bold italic' : 'text-slate-800'
+                          }`}
+                        >
+                          {isNull ? 'NULL' : String(val)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="py-6 text-center text-xs text-slate-400">
+              No preview rows available for {srcTable}.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+

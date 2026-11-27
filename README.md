@@ -82,39 +82,80 @@ python agent_harness.py
 
 ---
 
-## 📂 Project Structure
+## 📂 Standardized Project Structure
 
-```
-h:\AAVIL Inc\DataX\DataX/
-├── agent_harness.py             # Autonomous Python agentic harness with tool calling
-├── index.html                   # HTML entrypoint with Outfit & Inter typography
-├── package.json                 # React, Vite, Lucide, Tailwind, SheetJS dependencies
-├── vite.config.js               # Vite bundler configuration
-├── tailwind.config.js           # Custom enterprise dark theme & glow utilities
-├── public/
-│   └── sample_data/             # Preloaded SAP BW Excel & JSON datasets
-│       ├── sap_bw_procurement_extract.xlsx
-│       ├── sap_bw_procurement_extract.json
-│       ├── sap_bw_inventory_extract.xlsx
-│       └── sap_bw_inventory_extract.json
-└── src/
-    ├── App.jsx                  # Main application router (Website vs POC switcher)
-    ├── index.css                # Global styles, glassmorphism, glowing gradients
-    ├── main.jsx                 # React root renderer
-    ├── data/
-    │   ├── ontologyGraph.js     # Enterprise Knowledge Graph & plant resolver
-    │   └── sampleDatasets.js    # Preloaded SAP BW dataset definitions
-    ├── components/
-    │   ├── common/
-    │   │   ├── Navbar.jsx       # Universal responsive navbar with product dropdowns
-    │   │   └── Footer.jsx       # Corporate footer with platform links & certification
-    │   ├── website/
-    │   │   ├── Hero.jsx         # High-impact hero section with product spotlights
-    │   │   ├── ProductsSection.jsx   # Continuum vs DataX deep dive
-    │   │   ├── ExpertiseSection.jsx  # Ontologies, Knowledge Graphs & Agent Harness
-    │   │   ├── ArchitecturePipeline.jsx # Interactive 4-step pipeline inspector
-    │   │   ├── CaseStudiesSection.jsx   # Fortune 50 enterprise results
-    │   │   └── BookDemoModal.jsx        # Enterprise briefing scheduler
-    │   └── poc/
-    │       └── DataXPoc.jsx     # Complete Decision Intelligence Platform POC
+```text
+DataX/
+├── backend/                       # Python FastAPI Backend Architecture
+│   ├── service.py                 # Core FastAPI REST API application & routes
+│   ├── agent_harness.py           # Autonomous Agent Harness daemon
+│   ├── requirements.txt           # Python backend dependencies
+│   ├── core/                      # Foundational infrastructure (DB pool, Vault, JWT, logger, sanitizer)
+│   │   ├── db_config.py           # PostgreSQL/Neon storage connection manager
+│   │   ├── db_pool.py             # High-throughput connection pooling
+│   │   ├── jwt_config.py          # Cryptographic JWT secret configuration
+│   │   ├── vault.py               # Fernet master-key envelope encryption
+│   │   ├── structured_logger.py   # JSON logging & telemetry
+│   │   └── sanitizer.py           # Zero-trust PII masking & prompt defense
+│   ├── engines/                   # Analytical & AI Engines
+│   │   ├── engine.py              # DuckDB-powered fast analytical rule engine
+│   │   ├── ai_firewall_engine.py  # AI Firewall, RAG inspection & guardrails
+│   │   ├── fmd_mapping_engine.py  # Field Mapping Document engine
+│   │   ├── privacy_gateway_engine.py # Format-Preserving Encryption gateway
+│   │   ├── ml_certification_engine.py# AI/ML bias, safety & explainability
+│   │   └── siem_engine.py         # SIEM audit logging & Merkel hash chains
+│   ├── pipeline/                  # Pipeline Orchestration & State
+│   │   ├── pipeline.py            # End-to-end data pipeline orchestrator
+│   │   ├── orchestrator.py        # Task graph coordinator
+│   │   ├── checkpointer.py        # Crash-recovery stage checkpointer
+│   │   ├── alerts.py              # Alerting, webhook dispatch & DLQ
+│   │   ├── resilience.py          # Circuit breakers & idempotency manager
+│   │   └── streamer.py            # Real-time chunked data streamer
+│   ├── security/                  # Auth, RBAC & Licensing
+│   │   ├── auth_engine.py         # Multi-tenant user auth & bcrypt hashing
+│   │   ├── rbac_engine.py         # Role-based access control & IdP SSO
+│   │   ├── license_engine.py      # Signed enterprise license verification
+│   │   └── entitlements.py        # Feature quotas & usage metering
+│   ├── connectors/                # Enterprise Connectors
+│   │   ├── connectors.py          # Multi-database driver (Postgres, MSSQL, MySQL, Oracle)
+│   │   └── connector_ecosystem.py # Catalog registry & health probes
+│   ├── governance/                # Compliance & Management
+│   │   ├── governance.py          # Policy enforcement & audit ledgers
+│   │   ├── change_management.py   # Version diffs & approval workflows
+│   │   ├── tenant_manager.py      # Organization & tenant isolation
+│   │   └── sap_generator.py       # SAP domain packs & BAPI builders
+│   └── models/                    # Pydantic Schemas & Schemas
+│       └── models.py              # API models & serialization contracts
+│
+├── src/                           # React 18 / Vite Frontend Application
+│   ├── components/                # Modular UI components & design system
+│   ├── pages/                     # Application views (CleanFlow, Mapping Studio, AI Firewall)
+│   ├── context/                   # React Context state providers (Auth, Navigation, RuleEngine)
+│   └── services/                  # Frontend API clients, error ring-buffers & telemetry
+│
+├── tests/                         # Test & Verification Suites
+│   ├── test_fmd_mapping_engine.py # FMD unit test suite
+│   ├── egress_block_test.py       # Air-gapped zero-egress network leak audit
+│   ├── benchmark.py               # Data pipeline performance benchmark
+│   └── gateway_benchmark.py       # Privacy gateway throughput benchmark
+│
+├── docs/                          # Comprehensive Documentation
+│   ├── AGENTS.md                  # Autonomous agent harness specification
+│   ├── DATAX_BUSINESS_PROBLEM_AND_ARCHITECTURE.md
+│   ├── DEMO_SCRIPT.md             # Product demo walkthrough
+│   ├── TESTING_GUIDE.md           # Verification & test execution guide
+│   └── roadmap/                   # Strategic enterprise roadmap & milestones
+│
+├── deploy/                        # Production & Container Manifests
+│   ├── Dockerfile.backend         # Production Python 3.11 container
+│   ├── Dockerfile.frontend        # Production Nginx frontend container
+│   ├── nginx.conf                 # Production reverse-proxy config
+│   └── helm/                      # Kubernetes Helm charts
+│
+├── scripts/                       # DevOps & Remote Maintenance Scripts
+├── data/                          # Local persistent storage stores (.fmd_store.json, etc.)
+├── public/                        # Static assets, branding, and sample data
+├── service.py                     # Root compatibility shim
+├── docker-compose.yml             # Local multi-service orchestration
+└── package.json                   # Frontend dependencies & build commands
 ```

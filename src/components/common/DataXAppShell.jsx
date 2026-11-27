@@ -1,0 +1,430 @@
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
+import { 
+  Activity, 
+  Layers, 
+  Network, 
+  Clock, 
+  ShieldCheck, 
+  TrendingUp, 
+  Settings, 
+  Search, 
+  HelpCircle, 
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronRight,
+  Zap,
+  Menu,
+  X,
+  Shield,
+  Cpu,
+  Sparkles,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Workflow,
+  GitBranch,
+  FileSpreadsheet
+} from 'lucide-react';
+import { useNavigation } from '../../context/NavigationContext';
+import { getStudioRoute } from '../../data/studioRoutes';
+import { useRuleEngine } from '../../context/RuleEngineContext';
+import Logo from '../icons/Logo';
+import NotificationCenter from './NotificationCenter';
+import DataXUserMenu from './DataXUserMenu';
+import AmbientBackgroundFlow from './AmbientBackgroundFlow';
+import HeaderSearchBar from './HeaderSearchBar';
+import NavigateFilterModal from './NavigateFilterModal';
+import OnboardingWizard from './OnboardingWizard';
+import UseCaseAdvisorModal from './UseCaseAdvisorModal';
+
+// Parent Layout Context so DataXAppShell stays mounted once at the top layout level
+const AppShellLayoutContext = createContext(false);
+
+export default function DataXAppShell({ 
+  children, 
+  showContextBar = false,
+  compact = false,
+  onSwitchToMarketing 
+}) {
+  const isAlreadyWrappedInParentShell = useContext(AppShellLayoutContext);
+
+  // If a child page also wraps with <DataXAppShell>, pass children directly
+  // so the parent layout sidebar remains 100% constant without duplicating or remounting.
+  if (isAlreadyWrappedInParentShell) {
+    return <>{children}</>;
+  }
+
+  return (
+    <AppShellLayoutContext.Provider value={true}>
+      <DataXMasterLayout 
+        showContextBar={showContextBar} 
+        compact={compact} 
+        onSwitchToMarketing={onSwitchToMarketing}
+      >
+        {children}
+      </DataXMasterLayout>
+    </AppShellLayoutContext.Provider>
+  );
+}
+
+function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketing }) {
+  const { currentScreen, navigateTo } = useNavigation();
+  const ruleEngine = useRuleEngine?.() || {};
+  const { activeThread, threads = [], selectThread } = ruleEngine;
+
+  // Persistent sliding sidebar state (defaults to open on desktop)
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('datax_sidebar_open');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [navigateModalOpen, setNavigateModalOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [advisorModalOpen, setAdvisorModalOpen] = useState(false);
+  const [threadPickerOpen, setThreadPickerOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const threadPickerRef = useRef(null);
+
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('datax_sidebar_open', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Close dropdowns on click outside
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (threadPickerRef.current && !threadPickerRef.current.contains(e.target)) {
+        setThreadPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  // Global keyboard shortcuts: ⌘/ (Navigate & Filter), ⌘B (Toggle Sidebar)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        setNavigateModalOpen(prev => !prev);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setNavigateModalOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const currentThreadName = activeThread?.name || 'SAP BW ➔ S/4HANA Clean Core';
+
+  // Organized Sidebar Navigation Groups
+  const CORE_PILLARS = [
+    { id: 'workflows', label: 'Workflows', screen: 'workflows', icon: Activity, badge: threads.length || 5, desc: 'Autonomous Data & AI Pipelines' },
+    { id: 'ai-firewall', label: 'AI Firewall', screen: 'ai-firewall', icon: Shield, badge: 'Zero-Egress', badgeColor: 'blue', desc: 'Reverse Proxy & Prompt Guard' },
+    { id: 'ml-certify', label: 'ML Certify', screen: 'ml-certify', icon: Cpu, badge: 'PSI Gate', desc: 'Drift, Leakage & SFT Certification' },
+    { id: 'connections', label: 'Connections', screen: 'connections', icon: Network, desc: 'Enterprise Data & Secret Vault' },
+  ];
+
+  const PIPELINE_OPERATIONS = [
+    { id: 'canvas', label: 'Visual Canvas', screen: 'canvas', icon: Workflow, desc: 'Interactive DAG Rule Builder' },
+    { id: 'mapping-studio', label: 'Schema & Migration Studio', screen: 'mapping-studio', icon: FileSpreadsheet, badge: 'SAP FMD', desc: 'Enterprise Schema Migration & Multi-Tab FMDs' },
+    { id: 'templates', label: 'Domain Templates', screen: 'templates', icon: Layers, desc: 'Certified Industry Blueprints' },
+    { id: 'quarantine', label: 'Quarantine DLQ', screen: 'quarantine', icon: SlidersHorizontal, desc: 'Dead-Letter Isolation & Fix' },
+    { id: 'shadow', label: 'Shadow Parity', screen: 'shadow', icon: Zap, desc: 'Dual-Twin Reconciliation' },
+    { id: 'history', label: 'Run Telemetry', screen: 'history', icon: Clock, desc: 'Execution & Commit History' },
+  ];
+
+  const GOVERNANCE_ITEMS = [
+    { id: 'audit', label: 'Audit Ledger', screen: 'audit', icon: ShieldCheck, desc: 'SHA-256 Tamper-Evident SIEM' },
+    { id: 'roi', label: 'Executive ROI', screen: 'roi', icon: TrendingUp, desc: 'Board Risk & Value Dossier' },
+    { id: 'settings', label: 'Settings & RBAC', screen: 'settings', icon: Settings, desc: 'Tenant, SSO, Cron & API Keys' },
+  ];
+
+  const studioRoute = getStudioRoute(currentScreen);
+  const isNavActive = screen => studioRoute.section === screen || (screen === 'mapping-studio' && ['mapping-studio', 'schema-studio', 'migration-studio', 'fmd', 'fmd-mapping'].includes(studioRoute.section));
+  const isCanvasScreen = studioRoute.usesCanvas;
+  const showNewWorkflow = studioRoute.showCreate || isCanvasScreen;
+
+  const getBreadcrumbLabel = () => {
+    return studioRoute.label;
+  };
+
+  // Show active pipeline context bar automatically on studio/operation screens
+  const shouldShowPipelinePicker = showContextBar || isCanvasScreen || ['quarantine', 'shadow', 'audit', 'history'].includes(studioRoute.section) || currentScreen === 'live-auto-fix';
+
+  const renderSidebarNavButton = (item) => {
+    const active = isNavActive(item.screen);
+    const Icon = item.icon;
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => {
+          navigateTo(item.screen);
+          setMobileMenuOpen(false);
+        }}
+        className={`w-full group flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-xs transition-all duration-150 cursor-pointer text-left relative ${
+          active
+            ? 'bg-[#2D55F5] text-white font-semibold shadow-sm shadow-[#2D55F5]/20'
+            : 'text-[#474E61] dark:text-slate-300 hover:bg-[#EEF2FF]/70 dark:hover:bg-white/[0.06] hover:text-[#0A0F1F] dark:hover:text-white font-medium'
+        }`}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+            active 
+              ? 'bg-white/20 text-white' 
+              : 'bg-[#F5F6FA] dark:bg-white/[0.05] text-[#5F6678] dark:text-slate-400 group-hover:bg-white group-hover:text-[#2D55F5]'
+          }`}>
+            <Icon className="w-3.5 h-3.5" />
+          </div>
+          <div className="truncate">
+            <div className="leading-tight truncate">{item.label}</div>
+            <div className={`text-[10px] truncate mt-0.5 ${
+              active ? 'text-blue-100/90 font-normal' : 'text-[#8E95A9] dark:text-slate-500 font-normal'
+            }`}>
+              {item.desc}
+            </div>
+          </div>
+        </div>
+
+        {item.badge && (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 ${
+            active
+              ? 'bg-white/20 text-white'
+              : item.badgeColor === 'blue'
+                ? 'bg-[#EEF2FF] text-[#2D55F5] border border-[#2D55F5]/20'
+                : 'bg-[#F0F2F6] dark:bg-white/[0.08] text-[#5F6678] dark:text-slate-400'
+          }`}>
+            {item.badge}
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#141416] text-slate-800 dark:text-slate-200 font-sans antialiased relative transition-colors duration-200">
+      {/* 1. Ambient Background Drifting Mesh Flows */}
+      <AmbientBackgroundFlow />
+
+      {/* 2. Full-Width Main Content Viewport */}
+      <div className="min-h-screen flex flex-col relative z-10 w-full [--studio-breadcrumb-height:3.5rem] [--studio-content-height:calc(100dvh_-_3.5rem_-_var(--studio-breadcrumb-height))]">
+        {/* Top Navigation Header matching Screenshot */}
+        <header className="sticky top-0 z-30 w-full h-14 bg-white dark:bg-[#18181C] border-b border-[#E3E6EE] dark:border-white/[0.08] px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4 transition-colors shrink-0">
+          {/* Left: Brand Logo & Segmented 4-Tab Navigation */}
+          <div className="flex items-center gap-4 min-w-0">
+            <button
+              type="button"
+              onClick={() => navigateTo('workflows')}
+              className="flex items-center gap-2 cursor-pointer pr-1 shrink-0"
+              title="DataX"
+            >
+              <Logo size={28} />
+              <span className="font-bold text-[#0A0F1F] dark:text-white text-base tracking-tight">DataX</span>
+            </button>
+
+            {/* Segmented Pill Navigation: Threads, Domain packs, Connections, Runs */}
+            {!isCanvasScreen && <div className="hidden md:inline-flex items-center bg-[#F2F4F7] dark:bg-white/[0.06] p-1 rounded-full text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => navigateTo('workflows')}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  isNavActive('workflows')
+                    ? 'bg-white dark:bg-[#2A2B32] text-[#2D55F5] font-semibold shadow-xs'
+                    : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F] dark:hover:text-white'
+                }`}
+              >
+                <GitBranch className="w-3.5 h-3.5" />
+                <span>Threads</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigateTo('templates')}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  isNavActive('templates')
+                    ? 'bg-white dark:bg-[#2A2B32] text-[#2D55F5] font-semibold shadow-xs'
+                    : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F] dark:hover:text-white'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Domain packs</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigateTo('connections')}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  isNavActive('connections')
+                    ? 'bg-white dark:bg-[#2A2B32] text-[#2D55F5] font-semibold shadow-xs'
+                    : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F] dark:hover:text-white'
+                }`}
+              >
+                <Network className="w-3.5 h-3.5" />
+                <span>Connections</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigateTo('history')}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                  isNavActive('history')
+                    ? 'bg-white dark:bg-[#2A2B32] text-[#2D55F5] font-semibold shadow-xs'
+                    : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F] dark:hover:text-white'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>Runs</span>
+              </button>
+            </div>}
+
+            {/* Active Pipeline Quick Selector Dropdown */}
+            {shouldShowPipelinePicker && (
+              <div className="hidden lg:flex items-center pl-2 min-w-0" ref={threadPickerRef}>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setThreadPickerOpen(!threadPickerOpen)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#222226] border border-[#CDD2DE] dark:border-white/[0.12] font-semibold text-xs text-[#0A0F1F] dark:text-slate-200 hover:border-[#2D55F5] transition-colors cursor-pointer max-w-[260px] truncate shadow-2xs"
+                  >
+                    <GitBranch className="w-3.5 h-3.5 text-[#2D55F5] shrink-0" />
+                    <span className="truncate">{currentThreadName}</span>
+                    <ChevronDown className={`w-3 h-3 text-slate-400 shrink-0 transition-transform ${threadPickerOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {threadPickerOpen && (
+                    <div className="absolute top-full left-0 mt-1.5 w-72 bg-white dark:bg-[#222226] border border-[#E3E6EE] dark:border-white/[0.1] rounded-xl shadow-xl py-1 z-50">
+                      {(threads.length > 0 ? threads : [
+                        { id: 'sap_bw_s4hana', name: 'SAP BW → S/4HANA Clean Core' },
+                        { id: 'customer_master_reconciliation', name: 'Customer Master & Identity' },
+                        { id: 'financial_gl_ledger', name: 'Financial GL & AP Ledger' },
+                        { id: 'healthcare_hipaa', name: 'Healthcare Patient Master' },
+                        { id: 'supply_chain_inventory', name: 'Supply Chain Inventory Balancer' }
+                      ]).map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            if (selectThread) selectThread(t.id);
+                            setThreadPickerOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-xs truncate transition-colors cursor-pointer ${
+                            activeThread?.id === t.id
+                              ? 'bg-[#EEF2FF] text-[#2D55F5] font-bold'
+                              : 'hover:bg-slate-50 dark:hover:bg-white/[0.05] text-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          {t.name || t.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right: Search Bar, Navigate Dropdown, Help, Notification Bell, User Avatar */}
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            {/* Search Input Bar */}
+            <div className={isCanvasScreen ? 'hidden lg:block lg:w-44 xl:w-64' : 'w-56 sm:w-64 lg:w-72'}>
+              <HeaderSearchBar placeholder={isCanvasScreen ? 'Search workflows, rules...' : 'Search threads, tables...'} />
+            </div>
+
+            {/* Navigation & Filter Dropdown Trigger Button */}
+            <button
+              type="button"
+              onClick={() => setNavigateModalOpen(prev => !prev)}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+                navigateModalOpen
+                  ? 'bg-[#EFF4FF] border border-[#2D55F5] text-[#2D55F5]'
+                  : 'bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] text-[#0A0F1F] dark:text-white hover:bg-[#F8FAFC] hover:border-[#CDD2DE]'
+              }`}
+              title="Navigate & filter (⌘/)"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={navigateModalOpen ? 'text-[#2D55F5]' : 'text-[#5F6678] dark:text-slate-400'}>
+                <path d="M2 4h12M2 8h9M2 12h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+              <span className="font-semibold text-xs">Navigate</span>
+              <span className="w-4 h-4 rounded-full bg-[#2D55F5] text-white text-[10px] font-bold flex items-center justify-center">2</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${navigateModalOpen ? 'rotate-180 text-[#2D55F5]' : 'text-[#8E95A9]'}`} />
+            </button>
+
+            {/* Help Button */}
+            <button
+              type="button"
+              onClick={() => navigateTo('help')}
+              className="p-1.5 text-[#5F6678] hover:text-[#0A0F1F] dark:hover:text-white hover:bg-[#F5F6FA] dark:hover:bg-white/[0.05] rounded-full transition-colors cursor-pointer"
+              title="Help & Documentation"
+              aria-label="Help & Documentation"
+            >
+              <HelpCircle className="w-4 h-4 text-[#8E95A9]" />
+            </button>
+
+            {/* Notification Center */}
+            <NotificationCenter />
+
+            {/* User Profile Avatar */}
+            <DataXUserMenu onSwitchToMarketing={onSwitchToMarketing} />
+          </div>
+        </header>
+
+        <div
+          className="flex shrink-0 items-center justify-between gap-3 bg-white px-4 sm:px-8 dark:bg-[#18181C]"
+          style={{ minHeight: 'var(--studio-breadcrumb-height)' }}
+        >
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-xs sm:text-sm">
+            <a href="#workflows" className="shrink-0 text-[#5F6678] hover:text-[#2D55F5] dark:text-slate-400">
+              Studio
+            </a>
+            <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-[#687287] dark:text-slate-400" />
+            <span aria-current="page" className="font-semibold text-[#0A0F1F] dark:text-white">
+              {studioRoute.label}
+            </span>
+          </nav>
+          {showNewWorkflow && (
+            <button
+              type="button"
+              onClick={() => navigateTo(isCanvasScreen ? 'start-thread?from=canvas' : 'start-thread')}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#2D55F5] px-3 text-xs font-semibold text-white hover:bg-[#2045DC] sm:px-4"
+            >
+              <Plus aria-hidden="true" className="size-4" />
+              New workflow
+            </button>
+          )}
+        </div>
+
+        <main className="flex-1 w-full min-w-0">
+          {children}
+        </main>
+      </div>
+
+      {/* Global Command Palette & Onboarding Modal Instances */}
+      <NavigateFilterModal 
+        isOpen={navigateModalOpen} 
+        onClose={() => setNavigateModalOpen(false)} 
+        onOpenAdvisor={() => setAdvisorModalOpen(true)} 
+      />
+      <OnboardingWizard 
+        isOpen={onboardingOpen} 
+        onClose={() => setOnboardingOpen(false)} 
+      />
+      <UseCaseAdvisorModal 
+        isOpen={advisorModalOpen} 
+        onClose={() => setAdvisorModalOpen(false)} 
+      />
+    </div>
+  );
+}

@@ -3,29 +3,60 @@
 @tailwind utilities;
 
 @layer base {
+  html, body {
+    font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     @apply bg-[#060a12] text-slate-100 font-sans antialiased overflow-x-hidden;
   }
 
   h1, h2, h3, h4, h5, h6 {
+    font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.022em;
     @apply font-display tracking-tight;
+  }
+
+  button, input, select, textarea {
+    font-family: inherit;
   }
 }
 
-/* Custom Scrollbar */
+/* Global Clean / Invisible / Sleek Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #080d1a;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: rgba(148, 163, 184, 0.4);
+}
+
+/* Invisible scrollbar utility class */
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
 }
 
 /* Glassmorphism & Glow Utilities */
@@ -90,4 +121,348 @@
 
 .radial-glow {
   background: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.18) 0%, rgba(59, 130, 246, 0.08) 35%, transparent 70%);
+}
+
+/* Virtualization and High-Performance DOM Rendering (PRF-05) */
+.virtual-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 44px;
+}
+
+.virtual-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 120px;
+}
+
+.virtual-canvas-node {
+  contain: layout style paint;
+}
+
+/* ========================================================
+   Adobe Studio Minimal Blended Design System (Zero-Neon Edition)
+   ======================================================== */
+@keyframes ambientDrift1 {
+  0% { transform: translate(0px, 0px) scale(1); }
+  50% { transform: translate(60px, 35px) scale(1.08); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+@keyframes ambientDrift2 {
+  0% { transform: translate(0px, 0px) scale(1.05); }
+  50% { transform: translate(-50px, -40px) scale(0.95); }
+  100% { transform: translate(0px, 0px) scale(1.05); }
+}
+
+@keyframes studioFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.studio-page-enter {
+  animation: studioFadeIn 280ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ambient-orb-1 {
+  animation: ambientDrift1 26s ease-in-out infinite alternate;
+}
+
+.ambient-orb-2 {
+  animation: ambientDrift2 32s ease-in-out infinite alternate;
+}
+
+/* Matte Blended Studio Surfaces (Dark & Light) */
+html.dark body {
+  background-color: #141416;
+  color: #E6E6E8;
+}
+
+html.light body {
+  background-color: #F5F5F7;
+  color: #1A1A1E;
+}
+
+/* Dark Mode Studio Overrides */
+html.dark .min-h-screen.bg-\[\#F8F9FA\],
+html.dark .min-h-screen.bg-\[\#F8FAFC\],
+html.dark .min-h-screen.bg-\[\#F9FAFB\],
+html.dark div.bg-\[\#F8F9FA\],
+html.dark main.bg-\[\#F8F9FA\] {
+  background-color: #141416 !important;
+  color: #A1A1A6 !important;
+}
+
+html.dark header.bg-white,
+html.dark nav.bg-white {
+  background-color: rgba(22, 22, 26, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(20px);
+  color: #EDEDF0 !important;
+}
+
+html.dark div.bg-white {
+  background-color: #1E1E24 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #E2E2E6 !important;
+}
+
+html.dark .text-\[\#0A0F1F\] {
+  color: #F5F5F7 !important;
+}
+
+html.dark .text-\[\#474E61\],
+html.dark .text-\[\#5F6678\] {
+  color: #9C9CA4 !important;
+}
+
+html.dark .border-\[\#E3E6EE\],
+html.dark .border-slate-200 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.dark .bg-\[\#F5F6FA\],
+html.dark .bg-slate-50 {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+html.dark .hover\:bg-\[\#F5F6FA\]:hover,
+html.dark .hover\:bg-slate-50:hover {
+  background-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+html.dark input.bg-white,
+html.dark select.bg-white,
+html.dark textarea.bg-white,
+html.dark input.bg-slate-50 {
+  background-color: #18181C !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #F1F1F4 !important;
+}
+
+/* Light Mode Studio Overrides */
+html.light .min-h-screen.bg-\[\#F8F9FA\],
+html.light .min-h-screen.bg-\[\#F8FAFC\],
+html.light div.bg-\[\#F8F9FA\] {
+  background-color: #F5F5F7 !important;
+}
+
+html.light header.bg-white {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+  border-color: rgba(0, 0, 0, 0.07) !important;
+  backdrop-filter: blur(20px);
+}
+
+html.light div.bg-white {
+  border-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+/* Zero-Neon & Harsh Green Neutralization (Adobe Spectrum Palette) */
+/* Landing page uses Figma volt #D4FF3A — .landing-volt classes are exempt */
+.bg-\[\#D4FF3A\]:not(.landing-volt),
+[fill="#D4FF3A"]:not(.landing-volt) {
+  background-color: #1473E6 !important;
+  fill: #93C5FD !important;
+  color: #FFFFFF !important;
+}
+
+.text-\[\#D4FF3A\]:not(.landing-volt) {
+  color: #1473E6 !important;
+}
+
+html.dark .text-\[\#D4FF3A\]:not(.landing-volt) {
+  color: #93C5FD !important;
+}
+
+/* ── Landing Page Figma Design Tokens ─────────────────────── */
+:root {
+  --landing-surface: #F5F6FA;
+}
+
+.landing-nav {
+  background: rgba(22, 28, 48, 0.72);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 32px rgba(10, 15, 31, 0.45);
+}
+
+.landing-demo-button,
+.landing-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 150ms;
+}
+
+.landing-demo-button {
+  padding: 9px 16px;
+  background-color: #2D55F5;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.landing-demo-button:hover {
+  background-color: #2449DA;
+}
+
+.landing-secondary-button {
+  padding: 9px 18px;
+  border: 1px solid #232B45;
+  background-color: #161C30;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.landing-secondary-button:hover {
+  background-color: #232B45;
+}
+
+/* Volt green #D4FF3A — landing page eyebrow + headline accent */
+.landing-volt-bg {
+  background-color: #D4FF3A !important;
+  color: #0A0F1F !important;
+}
+.landing-volt-text {
+  color: #D4FF3A !important;
+}
+
+/* Landing page h1 — Geist font (defeats global h1 Plus Jakarta Sans rule) */
+.landing-hero-h1 {
+  font-family: "Geist", sans-serif !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.045em !important;
+  line-height: 96% !important;
+  color: #FFFFFF !important;
+}
+.landing-hero-h1 .volt-span {
+  color: #D4FF3A !important;
+}
+
+/* Soften harsh emerald to Adobe muted slate-teal / ocean-slate */
+.text-emerald-500,
+.text-emerald-600 {
+  color: #3B7E74 !important;
+}
+
+html.dark .text-emerald-400,
+html.dark .text-emerald-500 {
+  color: #64A399 !important;
+}
+
+.bg-emerald-500 {
+  background-color: #3B7E74 !important;
+}
+
+.border-emerald-500\/20,
+.border-emerald-200 {
+  border-color: rgba(59, 126, 116, 0.25) !important;
+}
+
+.bg-emerald-50,
+.bg-emerald-500\/10 {
+  background-color: rgba(59, 126, 116, 0.1) !important;
+}
+
+/* Official DataX Design System - Unified Error System (00.3) */
+.datax-error-banner {
+  background-color: #FDEDEB;
+  border: 1px solid #F5C7C2;
+  border-radius: 14px;
+  color: #474E61;
+}
+
+.datax-error-icon {
+  color: #C2362F;
+}
+
+.datax-input-error {
+  border-color: #C2362F !important;
+  box-shadow: 0 0 0 1px rgba(194, 54, 47, 0.25) !important;
+}
+
+.datax-input-error:focus {
+  border-color: #C2362F !important;
+  box-shadow: 0 0 0 2px rgba(194, 54, 47, 0.35) !important;
+}
+
+/* =========================================================================
+   GLOBAL SMOOTH TRANSITION & MICRO-INTERACTION PHYSICS
+   ========================================================================= */
+
+/* Ultra-Smooth Theme Transition Across Entire DOM */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition: background-color 350ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 350ms cubic-bezier(0.16, 1, 0.3, 1),
+              color 350ms cubic-bezier(0.16, 1, 0.3, 1),
+              fill 350ms cubic-bezier(0.16, 1, 0.3, 1),
+              stroke 350ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+  transition-delay: 0s !important;
+}
+
+/* Smooth Interactive Elements */
+button,
+[role="button"],
+a,
+input,
+select,
+textarea {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  transition-duration: 180ms;
+}
+
+/* Subtle Click Physics / Press State */
+button:active:not(:disabled),
+[role="button"]:active:not(:disabled),
+a:active {
+  transform: scale(0.975);
+  transition-duration: 75ms;
+}
+
+/* Smooth Interactive Cards Lift & Depress */
+.interactive-card {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms ease;
+}
+.interactive-card:hover {
+  transform: translateY(-2px);
+}
+.interactive-card:active {
+  transform: translateY(0px) scale(0.99);
+}
+
+/* Smooth Dialog & Overlay Appearances */
+.animate-in-fade {
+  animation: dataxFadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-in-scale {
+  animation: dataxScaleIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes dataxFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dataxScaleIn {
+  from { 
+    opacity: 0; 
+    transform: scale(0.96) translateY(-6px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1) translateY(0); 
+  }
 }

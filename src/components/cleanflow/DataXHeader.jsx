@@ -1,4 +1,5 @@
-import React from 'react';
+import Logo from "../icons/Logo";
+import React, { useState, useEffect } from 'react';
 import { 
   Activity, 
   Layers, 
@@ -16,6 +17,9 @@ import {
 import { useNavigation } from '../../context/NavigationContext';
 import { useRuleEngine, isCredentialConfigured } from '../../context/RuleEngineContext';
 import DataXUserMenu from '../common/DataXUserMenu';
+import NotificationCenter from '../common/NotificationCenter';
+import GlobalSearchModal from '../common/GlobalSearchModal';
+import OnboardingWizard from '../common/OnboardingWizard';
 
 export default function DataXHeader({ 
   currentPage, 
@@ -26,10 +30,24 @@ export default function DataXHeader({
   onSwitchToMarketing,
   hideSubheader = false
 }) {
-  const { navigateTo } = useNavigation();
+  const { currentScreen, navigateTo } = useNavigation();
   const { activeThread, sourceConfig, targetConfig } = useRuleEngine();
   const [saveSuccess, setSaveSuccess] = React.useState(false);
   const [headerAlert, setHeaderAlert] = React.useState(null);
+  const [searchModalOpen, setSearchModalOpen] = React.useState(false);
+  const [onboardingOpen, setOnboardingOpen] = React.useState(false);
+
+  // Global Cmd+K / Ctrl+K listener for search
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchModalOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleSaveClick = () => {
     setSaveSuccess(true);
@@ -78,45 +96,86 @@ export default function DataXHeader({
           
           {/* Logo & Main Nav Tabs */}
           <div className="flex items-center gap-6">
-            <div 
-              className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity" 
-              onClick={() => navigateTo('threads')}
-              title="Return to Threads dashboard"
+            <button 
+              type="button"
+              className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition-opacity text-left shrink-0" 
+              onClick={() => navigateTo('workflows')}
+              title="Return to Workflows"
             >
-              <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shadow-xs shadow-blue-500/30">
-                <span className="text-white font-black text-sm tracking-tight font-display">X</span>
+              <Logo size={28} />
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-slate-900 dark:text-white tracking-tight text-base font-display">DataX</span>
+                <span className="hidden xl:inline-block px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.06]">
+                  Studio
+                </span>
               </div>
-              <span className="font-bold text-slate-900 tracking-tight text-base font-display">DataX</span>
-            </div>
+            </button>
 
             {/* Navigation Pills */}
             <nav className="hidden md:flex items-center gap-1">
               <button 
-                onClick={() => navigateTo('threads')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/60 transition-colors cursor-pointer"
+                onClick={() => navigateTo('workflows')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  currentScreen === 'workflows' || currentScreen === 'threads'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                }`}
               >
-                <Activity className="w-3.5 h-3.5 text-blue-600" />
-                Threads
+                <Activity className={`w-3.5 h-3.5 ${currentScreen === 'workflows' || currentScreen === 'threads' ? 'text-blue-600' : 'text-slate-400'}`} />
+                Workflows
               </button>
               <button 
-                onClick={() => navigateTo('new-thread')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                onClick={() => navigateTo('templates')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  currentScreen === 'templates' || currentScreen === 'domain-packs'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                }`}
               >
-                <Layers className="w-3.5 h-3.5 text-slate-400" />
-                Domain packs
+                <Layers className={`w-3.5 h-3.5 ${currentScreen === 'templates' || currentScreen === 'domain-packs' ? 'text-blue-600' : 'text-slate-400'}`} />
+                Templates
               </button>
               <button 
-                onClick={() => navigateTo('connect-source')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                onClick={() => navigateTo('connections')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  currentScreen === 'connections'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                }`}
               >
-                <Network className="w-3.5 h-3.5 text-slate-400" />
+                <Network className={`w-3.5 h-3.5 ${currentScreen === 'connections' ? 'text-blue-600' : 'text-slate-400'}`} />
                 Connections
               </button>
               <button 
-                onClick={() => navigateTo('history')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                onClick={() => navigateTo('quarantine')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  currentScreen === 'quarantine'
+                    ? 'bg-[#1473E6]/10 text-[#1473E6] dark:bg-[#1473E6]/20 dark:text-[#60A5FA]'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.05]'
+                }`}
               >
-                <Zap className="w-3.5 h-3.5 text-slate-400" />
+                <span>Quarantine</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-[#B86E24]/15 text-[#B86E24] dark:bg-[#D48B3F]/20 dark:text-[#FBBF24]">14</span>
+              </button>
+              <button 
+                onClick={() => navigateTo('shadow')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  currentScreen === 'shadow'
+                    ? 'bg-[#1473E6]/10 text-[#1473E6] dark:bg-[#1473E6]/20 dark:text-[#60A5FA]'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.05]'
+                }`}
+              >
+                <span>Shadow Parity</span>
+              </button>
+              <button 
+                onClick={() => navigateTo('history')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  currentScreen === 'history' || currentScreen === 'runs'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                }`}
+              >
+                <Zap className={`w-3.5 h-3.5 ${currentScreen === 'history' || currentScreen === 'runs' ? 'text-blue-600' : 'text-slate-400'}`} />
                 Runs
               </button>
             </nav>
@@ -124,24 +183,35 @@ export default function DataXHeader({
 
           {/* Search, Notifications & User */}
           <div className="flex items-center gap-3">
-            <div className="relative hidden sm:block w-48 md:w-56">
+            <div 
+              onClick={() => setSearchModalOpen(true)}
+              className="relative hidden sm:flex items-center w-48 md:w-56 cursor-pointer"
+            >
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search threads, tables..."
-                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                readOnly
+                placeholder="Search workflows, tables..."
+                className="w-full pl-8 pr-10 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 placeholder:text-slate-400 cursor-pointer hover:bg-slate-100 transition-all"
               />
+              <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400 bg-slate-200/70 px-1 py-0.5 rounded border border-slate-300 pointer-events-none">
+                ⌘K
+              </kbd>
             </div>
 
-            <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            <button 
+              onClick={() => setOnboardingOpen(true)}
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              title="First-Run Onboarding Guide"
+              aria-label="Open Onboarding Guide"
+            >
               <HelpCircle className="w-4 h-4" />
             </button>
-            <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors relative">
-              <Bell className="w-4 h-4" />
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 absolute top-1.5 right-1.5" />
-            </button>
 
-            {/* Dynamic Clerk Profile Avatar & Profile Details */}
+            {/* In-App Notification Center */}
+            <NotificationCenter />
+
+            {/* Dynamic Enterprise Profile Avatar & Profile Details */}
             <div className="flex items-center pl-1 border-l border-slate-200">
               <DataXUserMenu />
             </div>
@@ -189,7 +259,7 @@ export default function DataXHeader({
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  {sourceConfig?.table || 'source_data'} → {targetConfig?.table || 'target_data'} · active cleanflow
+                  {sourceConfig?.table || (sourceConfig?.availableTables && sourceConfig.availableTables[0]) || activeThread?.pipeline?.split('→')[0]?.trim() || sourceConfig?.database || 'source'} → {targetConfig?.table || activeThread?.pipeline?.split('→')[2]?.trim() || 'target'} · {activeThread?.domain || 'active cleanflow'}
                 </p>
               </div>
             </div>
@@ -240,6 +310,16 @@ export default function DataXHeader({
           )}
         </section>
       )}
+
+      {/* Global Command Modals (UX-01 & UX-05) */}
+      <GlobalSearchModal 
+        isOpen={searchModalOpen} 
+        onClose={() => setSearchModalOpen(false)} 
+      />
+      <OnboardingWizard 
+        isOpen={onboardingOpen} 
+        onClose={() => setOnboardingOpen(false)} 
+      />
     </>
   );
 }

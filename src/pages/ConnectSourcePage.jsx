@@ -14,14 +14,18 @@ import {
   ArrowLeft,
   FileCheck,
   FlaskConical,
-  Play
+  Play,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { useNavigation } from '../context/NavigationContext';
 import { useRuleEngine, isCredentialConfigured } from '../context/RuleEngineContext';
 import PipelineFlowNodes from '../components/cleanflow/PipelineFlowNodes';
 import DataXHeader from '../components/cleanflow/DataXHeader';
+import WorkflowCanvasBuilder from '../components/cleanflow/WorkflowCanvasBuilder';
+import { getTableCatalog, getTableData } from '../data/sampleDatasets';
 
-export default function ConnectSourcePage() {
+export default function ConnectSourcePage({ onSwitchToMarketing } = {}) {
   const { navigateTo } = useNavigation();
   const { 
     sourceConfig, 
@@ -31,6 +35,7 @@ export default function ConnectSourcePage() {
     previewRows: contextPreviewRows 
   } = useRuleEngine();
 
+  const [viewMode, setViewMode] = useState('canvas'); // 'canvas' | 'form'
   const [dbType, setDbType] = useState(
     sourceConfig?.engine === 'sap_bw' ? 'SAP BW' : 
     sourceConfig?.engine === 'mongodb' ? 'MongoDB' : 'PostgreSQL'
@@ -42,43 +47,69 @@ export default function ConnectSourcePage() {
   const [port, setPort] = useState(sourceConfig?.port || (sourceConfig?.engine === 'sap_bw' ? '443' : '5432'));
   const [databaseName, setDatabaseName] = useState(sourceConfig?.database || '');
   const [username, setUsername] = useState(sourceConfig?.user || sourceConfig?.username || '');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(sourceConfig?.password || '');
   const [showPassword, setShowPassword] = useState(false);
   const [readScope, setReadScope] = useState('selected');
   const [selectedTables, setSelectedTables] = useState(sourceConfig?.table ? [sourceConfig.table] : []);
+  const [previewTable, setPreviewTable] = useState(sourceConfig?.table || '');
   const [tableSearch, setTableSearch] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testSuccess, setTestSuccess] = useState(false);
+  const [sandboxLoaded, setSandboxLoaded] = useState(Boolean(sourceConfig?.demoSandbox));
   const [testError, setTestError] = useState(null);
   const [validationError, setValidationError] = useState(null);
   const [testMeta, setTestMeta] = useState({ latencyMs: 0, tableCount: 0 });
-  const [availableTables, setAvailableTables] = useState(
-    (sourceConfig?.availableTables || []).map(name => ({
-      name,
-      rows: 'Live table'
-    }))
-  );
+  const [availableTables, setAvailableTables] = useState(() => {
+    const engineKey = sourceConfig?.engine || 'sap_bw';
+    const fallback = getTableCatalog(engineKey);
+    if (sourceConfig?.availableTables && sourceConfig.availableTables.length > 0) {
+      return sourceConfig.availableTables.map(t => {
+        const name = typeof t === 'string' ? t : t.name;
+        const found = fallback.find(f => f.name === name);
+        return {
+          name,
+          rows: found ? found.rows : (typeof t === 'object' && t.rows ? t.rows : '1,420 rows')
+        };
+      });
+    }
+    return fallback;
+  });
 
-  const [previewRows, setPreviewRows] = useState(contextPreviewRows || []);
+  const [previewRows, setPreviewRows] = useState(() => {
+    if (contextPreviewRows && contextPreviewRows.length > 0) return contextPreviewRows;
+    const initialTbl = sourceConfig?.table || '0PUR_C01';
+    return getTableData(initialTbl, sourceConfig?.engine || 'sap_bw', 5).rows;
+  });
 
   // Sync state if sourceConfig changes
   useEffect(() => {
     if (sourceConfig) {
+      const engineKey = sourceConfig.engine || 'sap_bw';
       setDbType(
-        sourceConfig.engine === 'sap_bw' ? 'SAP BW' : 
-        sourceConfig.engine === 'mongodb' ? 'MongoDB' : 'PostgreSQL'
+        engineKey === 'sap_bw' ? 'SAP BW' : 
+        engineKey === 'mongodb' ? 'MongoDB' : 'PostgreSQL'
       );
       if (sourceConfig.connectionUri) setConnString(sourceConfig.connectionUri);
       if (sourceConfig.host) setHost(sourceConfig.host);
       if (sourceConfig.port) setPort(sourceConfig.port);
       if (sourceConfig.database) setDatabaseName(sourceConfig.database);
-      if (sourceConfig.table) setSelectedTables([sourceConfig.table]);
+      if (sourceConfig.user || sourceConfig.username) setUsername(sourceConfig.user || sourceConfig.username);
+      if (sourceConfig.password) setPassword(sourceConfig.password);
+      if (sourceConfig.table) {
+        setSelectedTables([sourceConfig.table]);
+        setPreviewTable(sourceConfig.table);
+      }
       if (sourceConfig.availableTables && sourceConfig.availableTables.length > 0) {
+        const fallback = getTableCatalog(engineKey);
         setAvailableTables(
-          sourceConfig.availableTables.map(name => ({
-            name,
-            rows: 'Live table'
-          }))
+          sourceConfig.availableTables.map(t => {
+            const name = typeof t === 'string' ? t : t.name;
+            const found = fallback.find(f => f.name === name);
+            return {
+              name,
+              rows: found ? found.rows : '1,420 rows'
+            };
+          })
         );
       }
     }
@@ -91,16 +122,41 @@ export default function ConnectSourcePage() {
     }
   }, [contextPreviewRows]);
 
+  const getResolvedUri = () => {
+    if (connectMethod === 'host' && host && username && password) {
+      const p = port || (dbType === 'SAP BW' ? '443' : dbType === 'MongoDB' ? '27017' : '5432');
+      if (dbType === 'SAP BW') {
+        return `jdbc:sap://${host}:${p}?encrypt=true&validateCertificate=false` +
+          `&user=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}` +
+          (databaseName ? `&databaseName=${encodeURIComponent(databaseName)}` : '');
+      } else if (dbType === 'MongoDB') {
+        const isAtlas = host.includes('.mongodb.net');
+        if (isAtlas) {
+          return `mongodb+srv://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}/${databaseName || ''}?retryWrites=true&w=majority`;
+        }
+        return `mongodb://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${p}/${databaseName || ''}`;
+      } else {
+        const isCloudPg = host.includes('neon.tech') || host.includes('rds.amazonaws.com') || host.includes('supabase.co');
+        const sslQuery = isCloudPg ? '?sslmode=require' : '';
+        return `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${p}/${databaseName || ''}${sslQuery}`;
+      }
+    }
+    return connString;
+  };
+
   const handleTest = async () => {
+    setSandboxLoaded(false);
     setIsTesting(true);
     setTestError(null);
     setValidationError(null);
     setTestSuccess(false);
 
     const engineKey = dbType === 'SAP BW' ? 'sap_bw' : dbType === 'MongoDB' ? 'mongodb' : dbType === 'Snowflake' ? 'snowflake' : dbType === 'Databricks' ? 'databricks' : 'postgres';
+    const effectiveUri = getResolvedUri();
+
     const result = await testConnection({
       engine: engineKey,
-      connectionUri: connString,
+      connectionUri: effectiveUri,
       host,
       port,
       database: databaseName,
@@ -112,22 +168,88 @@ export default function ConnectSourcePage() {
     setIsTesting(false);
     if (result.success) {
       setTestSuccess(true);
+      if (effectiveUri) {
+        setConnString(effectiveUri);
+      }
+      setSourceConfig(prev => ({
+        ...prev,
+        engine: engineKey,
+        connectionUri: effectiveUri,
+        host,
+        port,
+        database: databaseName,
+        user: username,
+        password
+      }));
       setTestMeta({
         latencyMs: result.latencyMs || 42,
         tableCount: result.tableCount || (result.tables ? result.tables.length : 0)
       });
 
-      if (result.tables && result.tables.length > 0) {
-        setAvailableTables(
-          result.tables.map(name => ({
-            name,
-            rows: 'Live table'
-          }))
-        );
-        // Automatically select the first table if none selected yet
-        if (selectedTables.length === 0) {
-          handleSelectTable(result.tables[0]);
-        }
+      // Select a valid table from discovered tables if current selection is not in result.tables
+      const discoveredList = Array.isArray(result.tables) ? result.tables : [];
+      const currentSelection = (selectedTables && selectedTables.length > 0 ? selectedTables[0] : null)
+        || previewTable
+        || sourceConfig?.table;
+      const activeTable = (currentSelection && discoveredList.includes(currentSelection))
+        ? currentSelection
+        : (discoveredList.includes('raw_customers')
+          ? 'raw_customers'
+          : discoveredList.includes('raw_users')
+            ? 'raw_users'
+            : (discoveredList[0] || currentSelection || '0IC_C03'));
+      const resolvedDb = result.database || databaseName;
+      if (result.database && result.database !== databaseName) {
+        setDatabaseName(result.database);
+      }
+      const activeTableData = getTableData(activeTable, engineKey, 5);
+
+      setSourceConfig(prev => ({
+        ...prev,
+        engine: engineKey,
+        connectionUri: effectiveUri,
+        host,
+        port,
+        database: resolvedDb,
+        user: username,
+        password,
+        table: activeTable,
+        totalRows: activeTableData.rowCount,
+        rowCount: activeTableData.rowCount,
+        discoveredColumns: activeTableData.columns
+      }));
+
+      if (discoveredList.length > 0) {
+        const fallbackCatalog = getTableCatalog(engineKey);
+        const mappedTables = result.tableDetails && result.tableDetails.length > 0
+          ? result.tableDetails
+          : discoveredList.map(name => {
+              const matched = fallbackCatalog.find(c => c.name === name);
+              return {
+                name,
+                rows: matched ? matched.rows : 'Live Table'
+              };
+            });
+        setAvailableTables(mappedTables);
+
+        setSelectedTables([activeTable]);
+        setPreviewTable(activeTable);
+        setPreviewRows(activeTableData.rows);
+
+        fetchTableSample(activeTable, 5, effectiveUri, {
+          engine: engineKey,
+          connectionUri: effectiveUri,
+          host,
+          port,
+          database: resolvedDb,
+          user: username,
+          password,
+          table: activeTable
+        }).then(sampleRes => {
+          if (sampleRes && sampleRes.rows && sampleRes.rows.length > 0) {
+            setPreviewRows(sampleRes.rows);
+          }
+        });
       }
     } else {
       setTestSuccess(false);
@@ -135,22 +257,111 @@ export default function ConnectSourcePage() {
     }
   };
 
+  const handleLoadCertifiedSapSandbox = () => {
+    const catalog = getTableCatalog('sap_bw');
+    const table = catalog[0]?.name || '0PUR_C01';
+    const sample = getTableData(table, 'sap_bw', 5);
+    setSandboxLoaded(true);
+    setTestSuccess(false);
+    setTestError(null);
+    setConnString('');
+    setHost('');
+    setPort('443');
+    setDatabaseName('Certified SAP Sandbox');
+    setUsername('');
+    setPassword('');
+    setConnectMethod('host');
+    setAvailableTables(catalog);
+    setSelectedTables([table]);
+    setPreviewTable(table);
+    setPreviewRows(sample.rows);
+    setValidationError(null);
+    setSourceConfig(prev => ({
+      ...prev,
+      engine: 'sap_bw',
+      demoSandbox: true,
+      connectionUri: '',
+      host: '',
+      port: '443',
+      database: 'Certified SAP Sandbox',
+      user: '',
+      password: '',
+      table,
+      availableTables: catalog.map(item => item.name),
+      discoveredColumns: sample.columns,
+      sampleRows: sample.rows,
+    }));
+  };
+
+  const handleToggleTable = async (tableName) => {
+    setSelectedTables([tableName]);
+    setPreviewTable(tableName);
+
+    // Render local sample data while a live sample request is pending.
+    const engineKey = dbType === 'SAP BW' ? 'sap_bw' : dbType === 'MongoDB' ? 'mongodb' : 'postgres';
+    const localData = getTableData(tableName, engineKey, 5);
+    setPreviewRows(localData.rows);
+
+    setSourceConfig(prev => ({
+      ...prev,
+      table: tableName,
+      totalRows: localData.rowCount,
+      rowCount: localData.rowCount,
+      discoveredColumns: localData.columns
+    }));
+
+    const effectiveUri = connectMethod === 'string' && connString.trim()
+      ? connString.trim()
+      : (dbType === 'SAP BW' && host.trim())
+      ? `jdbc:sap://${host.trim()}:${port || '443'}?encrypt=true&validateCertificate=false&user=${username || ''}&password=${password || ''}`
+      : connString;
+    if (!sandboxLoaded) {
+      const sampleRes = await fetchTableSample(tableName, 5, effectiveUri);
+      if (sampleRes && sampleRes.rows && sampleRes.rows.length > 0) {
+        setPreviewRows(sampleRes.rows);
+      }
+    }
+  };
+
   const handleSelectTable = async (tableName) => {
     setSelectedTables([tableName]);
-    const sampleRes = await fetchTableSample(tableName, 5);
-    if (sampleRes && sampleRes.rows) {
-      setPreviewRows(sampleRes.rows);
+    setPreviewTable(tableName);
+
+    // Render local sample data while a live sample request is pending.
+    const engineKey = dbType === 'SAP BW' ? 'sap_bw' : dbType === 'MongoDB' ? 'mongodb' : 'postgres';
+    const localData = getTableData(tableName, engineKey, 5);
+    setPreviewRows(localData.rows);
+
+    setSourceConfig(prev => ({
+      ...prev,
+      table: tableName,
+      totalRows: localData.rowCount,
+      rowCount: localData.rowCount,
+      discoveredColumns: localData.columns
+    }));
+
+    const effectiveUri = connectMethod === 'string' && connString.trim()
+      ? connString.trim()
+      : (dbType === 'SAP BW' && host.trim())
+      ? `jdbc:sap://${host.trim()}:${port || '443'}?encrypt=true&validateCertificate=false&user=${username || ''}&password=${password || ''}`
+      : connString;
+    if (!sandboxLoaded) {
+      const sampleRes = await fetchTableSample(tableName, 5, effectiveUri);
+      if (sampleRes && sampleRes.rows && sampleRes.rows.length > 0) {
+        setPreviewRows(sampleRes.rows);
+      }
     }
   };
 
   const handleSaveSource = () => {
     setValidationError(null);
     const engineKey = dbType === 'SAP BW' ? 'sap_bw' : dbType === 'MongoDB' ? 'mongodb' : dbType === 'Snowflake' ? 'snowflake' : dbType === 'Databricks' ? 'databricks' : 'postgres';
+    const effectiveUri = getResolvedUri();
     
     // Check credentials before proceeding
     const candidateCreds = {
       engine: engineKey,
-      connectionUri: connString,
+      connectionUri: effectiveUri,
       host,
       port,
       database: databaseName,
@@ -158,27 +369,32 @@ export default function ConnectSourcePage() {
       password
     };
 
-    if (!isCredentialConfigured(candidateCreds)) {
+    if (!sandboxLoaded && !isCredentialConfigured(candidateCreds)) {
       setValidationError('Source credentials required: Please enter valid Connection URI or Host, Database, Username, and Password.');
       return;
     }
 
-    const primaryTable = selectedTables[0];
+    const primaryTable = selectedTables[0] || previewTable || sourceConfig?.table || '0IC_C03';
     if (!primaryTable) {
       setValidationError('Table selection required: Please test connection and select a source table before saving.');
       return;
     }
 
+    const activeTableData = getTableData(primaryTable, engineKey, 5);
     // Auto-discover columns from sample data if available
-    let discoveredCols = sourceConfig.discoveredColumns || [];
+    let discoveredCols = activeTableData.columns;
     if (previewRows.length > 0) {
-      discoveredCols = Object.keys(previewRows[0]).filter(k => !k.startsWith('_'));
+      const keys = Object.keys(previewRows[0]).filter(k => !k.startsWith('_'));
+      if (keys.length > 0) {
+        discoveredCols = keys;
+      }
     }
 
     setSourceConfig(prev => ({
       ...prev,
       engine: engineKey,
-      connectionUri: connString,
+      demoSandbox: sandboxLoaded,
+      connectionUri: effectiveUri,
       host,
       port,
       database: databaseName,
@@ -186,7 +402,8 @@ export default function ConnectSourcePage() {
       password,
       table: primaryTable,
       availableTables: availableTables.map(t => t.name),
-      discoveredColumns: discoveredCols
+      discoveredColumns: discoveredCols,
+      sampleRows: previewRows
     }));
 
     navigateTo('generate-rules');
@@ -206,7 +423,7 @@ export default function ConnectSourcePage() {
       {/* Top Header & Subheader */}
       <DataXHeader
         currentPage="03"
-        onBack={() => navigateTo('start-thread')}
+        onBack={() => navigateTo('start-workflow')}
         onDryRun={() => navigateTo('running-dry-run')}
         onRunLive={() => navigateTo('dry-run-results')}
       />
@@ -214,9 +431,63 @@ export default function ConnectSourcePage() {
       {/* 3 Pipeline Flow Nodes */}
       <PipelineFlowNodes currentStep="03" />
 
-      {/* Main 2-Column Content */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      {/* View Mode Toggle Bar */}
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-3 pb-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Mode:</span>
+          <div className="p-1 bg-slate-200/70 rounded-xl inline-flex items-center gap-1 shadow-2xs">
+            <button
+              onClick={() => setViewMode('canvas')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                viewMode === 'canvas'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Workflow Canvas Builder</span>
+              <span className="px-1.5 py-0.2 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">Interactive</span>
+            </button>
+            <button
+              onClick={() => setViewMode('form')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                viewMode === 'form'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>Database Form View</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="text-xs text-slate-500 flex items-center gap-1.5 font-medium">
+          {viewMode === 'canvas' ? (
+            <span>💡 Click any <strong className="text-blue-600">+</strong> to add nodes, or select a node to configure properties modal</span>
+          ) : (
+            <button
+              onClick={() => setViewMode('canvas')}
+              className="text-blue-600 hover:text-blue-800 font-semibold underline cursor-pointer"
+            >
+              ← Back to Workflow Canvas Builder
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Canvas View */}
+      {viewMode === 'canvas' ? (
+        <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-3">
+          <WorkflowCanvasBuilder 
+            onSwitchToForm={() => setViewMode('form')}
+            onMoveToNext={handleSaveSource}
+          />
+        </main>
+      ) : (
+        /* Main 2-Column Content (Database Form View) */
+        <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           
           {/* Left Column: Connect Source Database */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-5">
@@ -242,6 +513,7 @@ export default function ConnectSourcePage() {
                       const newType = e.target.value;
                       setDbType(newType);
                       setTestSuccess(false);
+                      setSandboxLoaded(false);
                       setTestError(null);
                       setValidationError(null);
                       if (newType === 'SAP BW') {
@@ -309,10 +581,10 @@ export default function ConnectSourcePage() {
                       onChange={(e) => setConnString(e.target.value)}
                       placeholder={
                         dbType === 'SAP BW' ? 'jdbc:sap://<host>:443' :
-                        dbType === 'MongoDB' ? 'mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<database>' :
+                        dbType === 'MongoDB' ? 'mongodb+srv://<cluster>.mongodb.net/<database>' :
                         dbType === 'Snowflake' ? 'https://<account>.snowflakecomputing.com' :
                         dbType === 'Databricks' ? 'https://<workspace>.azuredatabricks.net' :
-                        'postgresql://<user>:<password>@<host>:5432/<database>?sslmode=require'
+                        'postgresql://<host>:5432/<database>?sslmode=require'
                       }
                       className="w-full pl-3 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                     />
@@ -566,6 +838,35 @@ export default function ConnectSourcePage() {
 
           {/* Right Column: Choose a Table & Live Preview */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-6 space-y-4">
+            
+            {/* Connection Status Banner */}
+            {!testSuccess && !sandboxLoaded && (
+              <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                <div className="flex items-start gap-2 text-amber-900">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Offline / Sandbox Schema Preview</span>
+                    <p className="text-[11px] text-amber-700">Enter your database credentials and click <strong>Test Connection</strong> to query live tables, or load an explicitly labeled local sandbox dataset.</p>
+                  </div>
+                </div>
+                {dbType === 'SAP BW' && (
+                  <button
+                    type="button"
+                    onClick={handleLoadCertifiedSapSandbox}
+                    className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] whitespace-nowrap cursor-pointer transition-colors shadow-2xs shrink-0"
+                  >
+                    Load Certified SAP Sandbox Dataset
+                  </button>
+                )}
+              </div>
+            )}
+            {sandboxLoaded && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900">
+                <strong>Certified SAP Sandbox Dataset · Offline preview only</strong>
+                <p className="text-[11px] text-amber-700 mt-1">These local sample records are not a live SAP connection.</p>
+              </div>
+            )}
+
             <div className="flex items-center justify-between pb-1 border-b border-slate-100">
               <h3 className="text-sm font-bold text-slate-900">Choose a table</h3>
               <div className="flex items-center gap-2 text-xs">
@@ -624,7 +925,7 @@ export default function ConnectSourcePage() {
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) => {
                             e.stopPropagation();
-                            handleSelectTable(table.name);
+                            handleToggleTable(table.name);
                           }}
                           className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         />
@@ -641,7 +942,7 @@ export default function ConnectSourcePage() {
             <div className="pt-2 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-700 font-mono">
-                  Preview <span className="text-blue-600 underline">{selectedTables[0] || 'table'}</span>
+                  Preview <span className="text-blue-600 underline">{previewTable || selectedTables[0] || 'table'}</span>
                 </span>
                 <span className="text-slate-400 font-mono text-[11px]">
                   {previewRows.length} sample rows
@@ -652,7 +953,7 @@ export default function ConnectSourcePage() {
                 <div className="border border-dashed border-slate-200 rounded-xl p-6 text-center text-xs text-slate-400 bg-slate-50/50">
                   <Database className="w-5 h-5 mx-auto text-slate-300 mb-1.5" />
                   <p className="font-semibold text-slate-600">No sample records</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Select a table above to load live sample rows from your database.</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{testSuccess ? 'Select a table above to load live sample rows from your database.' : 'Select a table above to load a local sandbox preview.'}</p>
                 </div>
               ) : (
                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
@@ -694,31 +995,32 @@ export default function ConnectSourcePage() {
           </div>
         )}
 
-        {/* Bottom Bar: Next AI Rules */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 mt-4 border-t border-slate-200">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <AlertCircle className="w-3.5 h-3.5 text-blue-500" />
-            Next: AI rules synthesis
+          {/* Bottom Bar: Next AI Rules */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-6 mt-4 border-t border-slate-200">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <AlertCircle className="w-3.5 h-3.5 text-blue-500" />
+              Next: AI rules synthesis
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => setViewMode('canvas')}
+                className="px-4 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-medium transition-colors cursor-pointer"
+              >
+                Canvas Builder
+              </button>
+              <button
+                onClick={handleSaveSource}
+                className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-all shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                Save source
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => navigateTo('start-thread')}
-              className="px-4 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveSource}
-              className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-all shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer"
-            >
-              <Check className="w-3.5 h-3.5 stroke-[3]" />
-              Save source
-            </button>
-          </div>
-        </div>
-
-      </main>
+        </main>
+      )}
     </div>
   );
 }

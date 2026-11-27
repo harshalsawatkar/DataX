@@ -1,0 +1,172 @@
+/**
+ * DataX Centralized Resilient API Client
+ * - Single source of truth for VITE_API_BASE
+ * - Automatic Authorization header injection
+ * - AbortController timeout & retry support
+ * - Standardized error extraction (no swallowed errors)
+ */
+
+export const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE || 
+  import.meta.env.VITE_API_BASE_URL || 
+  import.meta.env.VITE_API_URL || 
+  (typeof window !== 'undefined' && (window.location.hostname.includes('dataglow.ai') || window.location.pathname.startsWith('/datax')) ? '/datax-api' : 'https://dataglow.ai/datax-api')
+).replace(/\/+$/, '');
+
+export class ApiError extends Error {
+  constructor(message, status = 500, detail = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+/**
+ * Standard fetch wrapper with auth, timeouts, and JSON error extraction
+ */
+export async function apiRequest(endpoint, options = {}) {
+  const {
+    method = 'GET',
+    body = null,
+    headers = {},
+    timeoutMs = 30000,
+    token = null,
+    tenantId = 'tenant_default',
+    ...rest
+  } = options;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${cleanEndpoint}`;
+
+  // Extract tenantId from stored user profile if available
+  let effectiveTenantId = tenantId;
+  if (!effectiveTenantId || effectiveTenantId === 'tenant_default') {
+    try {
+      const storedProfile = 
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('datax_user_profile') : null) ||
+        (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('datax_user_profile') : null);
+      if (storedProfile) {
+        const u = JSON.parse(storedProfile);
+        if (u.tenantId) effectiveTenantId = u.tenantId;
+      }
+    } catch (_) {}
+  }
+
+  const requestHeaders = {
+    'Content-Type': 'application/json',
+    'X-Tenant-Id': effectiveTenantId || 'tenant_enterprise',
+    ...headers
+  };
+
+  // Attach auth token if provided or stored in sessionStorage / localStorage
+  const effectiveToken = 
+    token || 
+    (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('datax_auth_token') : null) || 
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('datax_auth_token') : null) ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('datax_jwt_token') : null) ||
+    (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('datax_jwt_token') : null);
+  if (effectiveToken) {
+    requestHeaders['Authorization'] = `Bearer ${effectiveToken}`;
+  }
+
+  const fetchConfig = {
+    method,
+    headers: requestHeaders,
+    signal: controller.signal,
+    ...rest
+  };
+
+  if (body) {
+    fetchConfig.body = typeof body === 'string' ? body : JSON.stringify(body);
+  }
+
+  try {
+    const res = await fetch(url, fetchConfig);
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      let detail = null;
+      let errorMsg = `API Request failed with HTTP ${res.status}`;
+      try {
+        const errJson = await res.json();
+        detail = errJson;
+        errorMsg = errJson.detail || errJson.message || errorMsg;
+      } catch (_) {
+        // response was not JSON
+      }
+      throw new ApiError(errorMsg, res.status, detail);
+    }
+
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return await res.json();
+    }
+    return await res.text();
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') {
+      throw new ApiError(`Request timed out after ${timeoutMs / 1000}s`, 408);
+    }
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    throw new ApiError(err.message || 'Network connection failed', 0, err);
+  }
+}
+
+export const api = {
+  get: (endpoint, options = {}) => apiRequest(endpoint, { ...options, method: 'GET' }),
+  post: (endpoint, body, options = {}) => apiRequest(endpoint, { ...options, method: 'POST', body }),
+  put: (endpoint, body, options = {}) => apiRequest(endpoint, { ...options, method: 'PUT', body }),
+  delete: (endpoint, options = {}) => apiRequest(endpoint, { ...options, method: 'DELETE' }),
+};
+
+export const fmdApi = {
+  seedDemo: () => apiRequest('/fmd/demo/seed', { method: 'POST' }),
+  listDemoFiles: () => apiRequest('/fmd/demo/files', { method: 'GET' }),
+  getDemoDownloadUrl: (fileKey) => `${API_BASE_URL}/fmd/demo/download/${encodeURIComponent(fileKey)}`,
+  getWorkspace: () => apiRequest('/fmd/documents', { method: 'GET' }),
+  uploadFmd: (payload) => apiRequest('/fmd/documents/upload', { method: 'POST', body: payload, timeoutMs: 60000 }),
+  deleteFmd: (docId) => apiRequest(`/fmd/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
+  getSheet: (docId, sheetName = '', highlightRow = null) => {
+    const params = new URLSearchParams();
+    if (sheetName) params.set('sheet_name', sheetName);
+    if (highlightRow) params.set('highlight_row', String(highlightRow));
+    const q = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest(`/fmd/documents/${encodeURIComponent(docId)}/sheet${q}`, { method: 'GET' });
+  },
+  uploadXref: (payload) => apiRequest('/fmd/xref/upload', { method: 'POST', body: payload, timeoutMs: 60000 }),
+  uploadSource: (payload) => apiRequest('/fmd/source/upload', { method: 'POST', body: payload, timeoutMs: 60000 }),
+  compare: (targetTable = 'MAKT', targetField = 'MAKTX') =>
+    apiRequest('/fmd/compare', { method: 'POST', body: { targetTable, targetField } }),
+  ask: (question, targetTable = 'MAKT', targetField = 'MAKTX') =>
+    apiRequest('/fmd/ask', { method: 'POST', body: { question, targetTable, targetField }, timeoutMs: 45000 }),
+  simulate: ({ targetTable = 'MAKT', targetField = 'MAKTX', xrefEnabled = true, applyCmmsOverride = false, records = null } = {}) =>
+    apiRequest('/fmd/simulate', {
+      method: 'POST',
+      body: { targetTable, targetField, xrefEnabled, applyCmmsOverride, records },
+    }),
+  getBodsExportUrl: (format = 'xlsx') => `${API_BASE_URL}/fmd/export/bods?format=${encodeURIComponent(format)}`,
+  // Phase 2 & Phase 3 endpoints
+  getCoverage: () => apiRequest('/fmd/coverage', { method: 'GET' }),
+  commitStaging: (payload = {}) => apiRequest('/fmd/staging/commit', { method: 'POST', body: payload }),
+  getStagingCommits: () => apiRequest('/fmd/staging/commits', { method: 'GET' }),
+  seedR33Revision: (payload = {}) => apiRequest('/fmd/demo/seed-r33', { method: 'POST', body: payload }),
+  diffVersions: (payload) => apiRequest('/fmd/diff', { method: 'POST', body: payload }),
+  getApprovals: () => apiRequest('/fmd/approvals', { method: 'GET' }),
+  decideApproval: (payload) => apiRequest('/fmd/approvals/decide', { method: 'POST', body: payload }),
+  extractBwSubset: (payload = {}) => apiRequest('/fmd/bw-extract', { method: 'POST', body: payload }),
+  getAuditChain: () => apiRequest('/fmd/audit', { method: 'GET' }),
+  verifyAuditChain: () => apiRequest('/fmd/audit/verify', { method: 'GET' }),
+  // Dynamic SaaS Universal Multi-Format Upload & Ephemeral Workspace Reset
+  uploadUniversal: (payload) =>
+    apiRequest('/fmd/upload-universal', { method: 'POST', body: payload, timeoutMs: 60000 }),
+  resetWorkspace: (payload = {}) =>
+    apiRequest('/fmd/reset-workspace', { method: 'POST', body: payload }),
+};
+
+export default api;

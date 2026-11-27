@@ -56,9 +56,17 @@ export default function ConnectTargetPage({ onSaveAndDryRun, onCancel }) {
     setTestSuccess(false);
 
     const engineKey = dbType.includes('SAP') ? 's4_hana' : dbType.includes('Databricks') ? 'databricks' : dbType.includes('Snowflake') ? 'snowflake' : 'postgres';
+    const effectiveUri = connectMethod === 'string' && connString.trim()
+      ? connString.trim()
+      : (engineKey.includes('hana') || engineKey.includes('sap')) && host.trim()
+      ? `jdbc:sap://${host.trim()}:${port || '443'}?encrypt=true&validateCertificate=false&user=${username || ''}&password=${password || ''}`
+      : (engineKey === 'mongodb' && host.trim())
+      ? `mongodb://${username || ''}:${password || ''}@${host.trim()}:${port || '27017'}/${databaseName || ''}`
+      : (host.trim() ? `postgresql://${username || ''}:${password || ''}@${host.trim()}:${port || '5432'}/${databaseName || ''}` : connString);
+
     const res = await testConnection({
       engine: engineKey,
-      connectionUri: connString,
+      connectionUri: effectiveUri,
       host,
       port,
       database: databaseName,
@@ -81,9 +89,17 @@ export default function ConnectTargetPage({ onSaveAndDryRun, onCancel }) {
     const finalTable = outputOption === 'suffix' ? suffixName : customTableName;
     const engineKey = dbType.includes('SAP') ? 's4_hana' : dbType.includes('Databricks') ? 'databricks' : dbType.includes('Snowflake') ? 'snowflake' : 'postgres';
 
+    const effectiveUri = connectMethod === 'string' && connString.trim()
+      ? connString.trim()
+      : (engineKey.includes('hana') || engineKey.includes('sap')) && host.trim()
+      ? `jdbc:sap://${host.trim()}:${port || '443'}?encrypt=true&validateCertificate=false&user=${username || ''}&password=${password || ''}`
+      : (engineKey === 'mongodb' && host.trim())
+      ? `mongodb://${username || ''}:${password || ''}@${host.trim()}:${port || '27017'}/${databaseName || ''}`
+      : (host.trim() ? `postgresql://${username || ''}:${password || ''}@${host.trim()}:${port || '5432'}/${databaseName || ''}` : connString);
+
     const candidateCreds = {
       engine: engineKey,
-      connectionUri: connString,
+      connectionUri: effectiveUri,
       host,
       port,
       database: databaseName,
@@ -104,7 +120,7 @@ export default function ConnectTargetPage({ onSaveAndDryRun, onCancel }) {
     setTargetConfig(prev => ({
       ...prev,
       engine: engineKey,
-      connectionUri: connString,
+      connectionUri: effectiveUri,
       host,
       port,
       database: databaseName,
@@ -223,7 +239,7 @@ export default function ConnectTargetPage({ onSaveAndDryRun, onCancel }) {
                         dbType.includes('SAP') ? 'jdbc:sap://<s4hana-host>:443' :
                         dbType.includes('Databricks') ? 'https://<workspace>.azuredatabricks.net' :
                         dbType.includes('Snowflake') ? 'https://<account>.snowflakecomputing.com' :
-                        'postgresql://<user>:<password>@<host>:5432/<database>?sslmode=require'
+                        'postgresql://<host>:5432/<database>?sslmode=require'
                       }
                       className="w-full pl-3 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     />

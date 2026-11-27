@@ -1,232 +1,337 @@
-import React, { useState } from 'react';
-import { Link } from '../context/NavigationContext';
+import React, { useState, useEffect } from 'react';
+import DataXAppShell from '../components/common/DataXAppShell';
 import { useRuleEngine } from '../context/RuleEngineContext';
-import Button from '../components/ui/Button';
-import Tag from '../components/ui/Tag';
-import Input from '../components/ui/Input';
-import Segmented from '../components/ui/Segmented';
-import DataXUserMenu from '../components/common/DataXUserMenu';
+import { useNavigation } from '../context/NavigationContext';
+import { 
+  ArrowLeft, 
+  Search, 
+  Play, 
+  CheckCircle2, 
+  Clock, 
+  ExternalLink 
+} from 'lucide-react';
 
-// User-Provided Official DataX Logo
-const DataXLogo = ({ size = 28 }) => (
-  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" className="shrink-0">
-    <rect width="64" height="64" rx="16" fill="#2D55F5" />
-    <polygon points="14.5,49.5 24.5,49.5 49.5,14.5 39.5,14.5" fill="#FFFFFF" />
-    <polygon points="14.5,14.5 24.5,14.5 31.5,24.5 21.5,24.5" fill="#D4FF3A" />
-    <polygon points="32.5,39.5 42.5,39.5 49.5,49.5 39.5,49.5" fill="#D4FF3A" />
-  </svg>
-);
-
-export default function RunHistoryPage() {
-  const { s4hanaDocNumber, dryRunResult, runHistory, activeThread, dynamicHealthScore } = useRuleEngine();
+export default function RunHistoryPage({ onSwitchToMarketing } = {}) {
+  const { navigateTo } = useNavigation();
+  const { runHistory } = useRuleEngine?.() || {};
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
 
-  // Weekly runs telemetry bar chart data (Figma Frame 10)
-  const barChartData = [
-    { day: 'Mon', clean: 8, remediated: 2, total: 10 },
-    { day: 'Tue', clean: 14, remediated: 3, total: 17 },
-    { day: 'Wed', clean: 11, remediated: 1, total: 12 },
-    { day: 'Thu', clean: 18, remediated: 4, total: 22 },
-    { day: 'Fri', clean: 16, remediated: 2, total: 18 },
-    { day: 'Sat', clean: 6, remediated: 1, total: 7 },
-    { day: 'Sun', clean: 9, remediated: 2, total: 11 },
+  // Default mock runs matching Main-1.png
+  const defaultRuns = [
+    {
+      id: 'run_8f21c0',
+      workflow: 'SAP BW → S/4HANA Clean Core',
+      trigger: 'Dry run',
+      volume: '1,420',
+      targetDoc: '—',
+      duration: '1.18 s',
+      status: 'Clean success',
+      statusType: 'success'
+    },
+    {
+      id: 'run_8f1e77',
+      workflow: 'SAP BW → S/4HANA Clean Core',
+      trigger: 'Live',
+      volume: '1,420',
+      targetDoc: '4500743585',
+      duration: '1.42 s',
+      status: 'Auto-remediated',
+      statusType: 'remediated'
+    },
+    {
+      id: 'run_8f1a02',
+      workflow: 'Customer Master & Identity',
+      trigger: 'Cron · 06:00',
+      volume: '2,108',
+      targetDoc: '—',
+      duration: '1.65 s',
+      status: 'Clean success',
+      statusType: 'success'
+    },
+    {
+      id: 'run_8f17b9',
+      workflow: 'Financial GL & AP Ledger',
+      trigger: 'Live',
+      volume: '964',
+      targetDoc: 'GL-20261110-07',
+      duration: '0.98 s',
+      status: 'Quarantine held',
+      statusType: 'quarantine'
+    }
   ];
 
-  const displayRuns = runHistory || [];
+  const runs = (runHistory && runHistory.length > 0) ? runHistory : defaultRuns;
 
-  const filteredRuns = displayRuns.filter((r) => {
-    if (filter === 'success' && r.variant !== 'success') return false;
-    if (filter === 'remediated' && r.variant !== 'volt') return false;
-    if (
-      search.trim() &&
-      !r.id.toLowerCase().includes(search.toLowerCase()) &&
-      !r.thread.toLowerCase().includes(search.toLowerCase())
-    ) {
-      return false;
+  const filteredRuns = runs.filter((r) => {
+    if (filter === 'success' && r.statusType !== 'success') return false;
+    if (filter === 'remediated' && r.statusType !== 'remediated') return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const idMatch = (r.id || '').toLowerCase().includes(q);
+      const wfMatch = (r.workflow || r.thread || '').toLowerCase().includes(q);
+      return idMatch || wfMatch;
     }
     return true;
   });
 
+  // 7-day bar chart values matching Main-1.png
+  const daysData = [
+    { day: 'Mon', clean: 78, remediated: 12 },
+    { day: 'Tue', clean: 95, remediated: 4 },
+    { day: 'Wed', clean: 65, remediated: 10 },
+    { day: 'Thu', clean: 96, remediated: 0 },
+    { day: 'Fri', clean: 88, remediated: 11 },
+    { day: 'Sat', clean: 55, remediated: 5 },
+    { day: 'Sun', clean: 45, remediated: 4 }
+  ];
+
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#474E61] font-sans antialiased flex flex-col">
-      {/* Top Navbar */}
-      <header className="w-full bg-white border-b border-[#E3E6EE] sticky top-0 z-40">
-        <div className="max-w-[1360px] mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="threads" className="flex items-center gap-2.5">
-              <DataXLogo size={32} />
-              <span className="font-bold text-[#0A0F1F] tracking-tight text-[18px]">DataX</span>
-            </Link>
-            <span className="text-[#CDD2DE] font-light">/</span>
-            <span className="text-sm font-semibold text-[#0A0F1F]">Execution History & Analytics</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link to="threads">
-              <Button variant="primary" size="md">
-                ← Return to Threads
-              </Button>
-            </Link>
-            <DataXUserMenu />
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="max-w-[1360px] w-full mx-auto px-6 py-8 flex-1 flex flex-col gap-7">
-        {/* Page Title & KPI Cards */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <DataXAppShell onSwitchToMarketing={onSwitchToMarketing}>
+      <main className="max-w-[1400px] mx-auto px-6 py-8 font-sans space-y-6">
+        {/* Header Block matching Main-1.png */}
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-[30px] font-bold text-[#0A0F1F] tracking-tight leading-none">
-              Runs & Analytics
+            <h1 className="text-3xl font-bold text-[#0A0F1F] tracking-tight">
+              Runs & analytics
             </h1>
-            <p className="text-[14px] text-[#5F6678] mt-2 font-normal">
-              Audit trails, execution telemetry, and Clean Core dispatch logs across all active threads.
+            <p className="text-sm text-[#5F6678] mt-1.5 font-medium">
+              Execution history, health and S/4HANA dispatch logs across every workflow.
             </p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => navigateTo('workflows')}
+            className="px-4 py-2 rounded-full border border-[#CDD2DE] bg-white hover:bg-[#F8FAFC] text-xs font-semibold text-[#0A0F1F] flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-[#5F6678]" />
+            <span>Back to workflows</span>
+          </button>
         </div>
 
-        {/* 4 Analytics Metrics */}
+        {/* 4 Top Metric Cards (Matching Main-1.png) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white border border-[#E3E6EE] rounded-[18px] p-5 shadow-xs">
-            <span className="text-xs font-semibold text-[#5F6678]">Runs This Week</span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-2xl font-bold text-[#0A0F1F]">69</span>
-              <Tag variant="success">+18% vs last week</Tag>
+          {/* Card 1 */}
+          <div className="bg-white border border-[#E3E6EE] rounded-[24px] p-6 shadow-xs space-y-1">
+            <span className="text-xs font-semibold text-[#5F6678] block">
+              Runs recorded
+            </span>
+            <div className="text-3xl font-extrabold text-[#0A0F1F] font-mono tracking-tight">
+              24
             </div>
-            <p className="text-[11px] text-[#8E95A9] mt-1">Across 3 active pipelines</p>
+            <span className="text-xs text-[#5F6678] block pt-1 font-medium">
+              This week · 3 workflows
+            </span>
           </div>
 
-          <div className="bg-white border border-[#E3E6EE] rounded-[18px] p-5 shadow-xs">
-            <span className="text-xs font-semibold text-[#5F6678]">Mean Data Health</span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-2xl font-bold text-[#0A0F1F]">
-                {dynamicHealthScore || activeThread?.successRate || 94.0}%
-              </span>
-              <Tag variant={(dynamicHealthScore || activeThread?.successRate || 94.0) >= 90 ? 'volt' : 'warning'}>
-                {(dynamicHealthScore || activeThread?.successRate || 94.0) >= 90 ? 'A+ Grade' : (dynamicHealthScore || activeThread?.successRate || 94.0) >= 75 ? 'B+ Grade' : 'C Grade'}
-              </Tag>
+          {/* Card 2 */}
+          <div className="bg-white border border-[#E3E6EE] rounded-[24px] p-6 shadow-xs space-y-1">
+            <span className="text-xs font-semibold text-[#5F6678] block">
+              Mean data health
+            </span>
+            <div className="text-3xl font-extrabold text-[#0A0F1F] font-mono tracking-tight">
+              96.8%
             </div>
-            <p className="text-[11px] text-[#8E95A9] mt-1">Evaluated across all business rules</p>
+            <span className="text-xs text-[#5F6678] block pt-1 font-medium">
+              Across all rules
+            </span>
           </div>
 
-          <div className="bg-white border border-[#E3E6EE] rounded-[18px] p-5 shadow-xs">
-            <span className="text-xs font-semibold text-[#5F6678]">S/4HANA Writeback Success</span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-2xl font-bold text-[#127A52]">100%</span>
-              <Tag variant="success">0 Failures</Tag>
+          {/* Card 3 */}
+          <div className="bg-white border border-[#E3E6EE] rounded-[24px] p-6 shadow-xs space-y-1">
+            <span className="text-xs font-semibold text-[#5F6678] block">
+              S/4HANA writeback
+            </span>
+            <div className="text-3xl font-extrabold text-[#0A0F1F] font-mono tracking-tight">
+              99.2%
             </div>
-            <p className="text-[11px] text-[#8E95A9] mt-1">Direct BAPI clean ingestion</p>
+            <span className="text-xs text-[#5F6678] block pt-1 font-medium">
+              Direct BAPI ingestion
+            </span>
           </div>
 
-          <div className="bg-white border border-[#E3E6EE] rounded-[18px] p-5 shadow-xs">
-            <span className="text-xs font-semibold text-[#5F6678]">Avg Execution Time</span>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-2xl font-bold text-[#2D55F5]">1.8s</span>
-              <Tag variant="neutral">Sub-second Latency</Tag>
+          {/* Card 4 */}
+          <div className="bg-white border border-[#E3E6EE] rounded-[24px] p-6 shadow-xs space-y-1">
+            <span className="text-xs font-semibold text-[#5F6678] block">
+              Avg execution time
+            </span>
+            <div className="text-3xl font-extrabold text-[#0A0F1F] font-mono tracking-tight">
+              1.4 s
             </div>
-            <p className="text-[11px] text-[#8E95A9] mt-1">Accelerated ReAct evaluation loop</p>
+            <span className="text-xs text-[#5F6678] block pt-1 font-medium">
+              Per 1,420-row batch
+            </span>
           </div>
         </div>
 
-        {/* Visual Bar Chart (Figma Frame 10 Match) */}
-        <div className="bg-white border border-[#E3E6EE] rounded-[22px] p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#F0F2F6]">
+        {/* Weekly Run Volume & Health Bar Chart Card matching Main-1.png */}
+        <div className="bg-white border border-[#E3E6EE] rounded-[24px] p-6 sm:p-8 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-2">
             <div>
-              <h3 className="text-sm font-bold text-[#0A0F1F]">Weekly Run Volume & Clean Core Health</h3>
-              <p className="text-xs text-[#5F6678]">Breakdown of clean records vs. ontology-remediated orders</p>
+              <h2 className="text-base font-bold text-[#0A0F1F]">
+                Weekly run volume & health
+              </h2>
+              <p className="text-xs text-[#5F6678] mt-0.5 font-medium">
+                Clean rows vs auto-remediated rows
+              </p>
             </div>
+
             <div className="flex items-center gap-4 text-xs font-medium">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-[3px] bg-[#2D55F5]" /> Clean Ingestion
+              <span className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#2D55F5]" />
+                <span className="text-[#0A0F1F]">Clean</span>
               </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-[3px] bg-[#D4FF3A]" /> Auto-Remediated
+              <span className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#B2CCFF]" />
+                <span className="text-[#0A0F1F]">Auto-remediated</span>
               </span>
             </div>
           </div>
 
-          {/* Bar Chart Visualization */}
-          <div className="h-48 flex items-end justify-between gap-6 pt-6 px-4">
-            {barChartData.map((d, idx) => {
-              const cleanHeight = `${(d.clean / 24) * 100}%`;
-              const remediatedHeight = `${(d.remediated / 24) * 100}%`;
-
-              return (
-                <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
-                  <span className="text-[10px] font-mono font-bold text-[#0A0F1F] opacity-0 group-hover:opacity-100 transition-opacity">
-                    {d.total} runs
-                  </span>
-                  <div className="w-full max-w-[42px] flex flex-col justify-end rounded-[6px] overflow-hidden bg-[#F5F6FA] h-full">
-                    <div style={{ height: remediatedHeight }} className="w-full bg-[#D4FF3A] transition-all" />
-                    <div style={{ height: cleanHeight }} className="w-full bg-[#2D55F5] transition-all" />
-                  </div>
-                  <span className="text-xs font-semibold text-[#5F6678] mt-1">{d.day}</span>
+          {/* Bar Chart Bars */}
+          <div className="h-56 flex items-end justify-between gap-4 sm:gap-8 pt-6 px-4">
+            {daysData.map((d) => (
+              <div key={d.day} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
+                <div className="w-full max-w-[56px] flex flex-col justify-end rounded-t-lg overflow-hidden h-full">
+                  {/* Top: Auto-remediated portion */}
+                  {d.remediated > 0 && (
+                    <div
+                      style={{ height: `${d.remediated}%` }}
+                      className="w-full bg-[#B2CCFF] transition-all"
+                    />
+                  )}
+                  {/* Bottom: Clean portion */}
+                  <div
+                    style={{ height: `${d.clean}%` }}
+                    className="w-full bg-[#2D55F5] transition-all"
+                  />
                 </div>
-              );
-            })}
+                <span className="text-xs font-semibold text-[#5F6678] mt-2">
+                  {d.day}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Run Audit Log Table */}
-        <div className="bg-white border border-[#E3E6EE] rounded-[22px] p-6 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-[#F0F2F6]">
-            <Segmented
-              options={[
-                { label: 'All Executions', value: 'all' },
-                { label: 'Clean Success', value: 'success' },
-                { label: 'Auto-Remediated', value: 'remediated' },
-              ]}
-              value={filter}
-              onChange={setFilter}
-            />
-            <div className="w-full sm:w-64">
-              <Input
-                placeholder="Search run ID or thread..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="text-xs"
-              />
-            </div>
+        {/* Filter and Search Bar matching Main-1.png */}
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+          {/* Filter Pills */}
+          <div className="bg-[#EDEFF5] p-1 rounded-full flex items-center text-xs">
+            <button
+              type="button"
+              onClick={() => setFilter('all')}
+              className={`px-4 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
+                filter === 'all'
+                  ? 'bg-white text-[#0A0F1F] shadow-2xs'
+                  : 'text-[#5F6678] hover:text-[#0A0F1F]'
+              }`}
+            >
+              All executions
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter('success')}
+              className={`px-4 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
+                filter === 'success'
+                  ? 'bg-white text-[#0A0F1F] shadow-2xs'
+                  : 'text-[#5F6678] hover:text-[#0A0F1F]'
+              }`}
+            >
+              Clean success
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter('remediated')}
+              className={`px-4 py-1.5 rounded-full font-semibold transition-all cursor-pointer ${
+                filter === 'remediated'
+                  ? 'bg-white text-[#0A0F1F] shadow-2xs'
+                  : 'text-[#5F6678] hover:text-[#0A0F1F]'
+              }`}
+            >
+              Auto-remediated
+            </button>
           </div>
 
-          <div className="border border-[#E3E6EE] rounded-[14px] overflow-hidden overflow-x-auto">
+          {/* Search Input */}
+          <div className="relative w-full sm:w-[320px]">
+            <Search className="w-4 h-4 text-[#8E95A9] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search run ID or workflow..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-[#CDD2DE] rounded-xl text-xs font-medium text-[#0A0F1F] placeholder:text-[#8E95A9] focus:outline-none focus:border-[#2D55F5]"
+            />
+          </div>
+        </div>
+
+        {/* Runs Table matching Main-1.png */}
+        <div className="bg-white border border-[#E3E6EE] rounded-[24px] shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#F8F9FA] text-[#5F6678] font-semibold border-b border-[#E3E6EE]">
+              <thead className="border-b border-[#E3E6EE] bg-white text-[#5F6678] text-[10px] font-bold tracking-wider uppercase">
                 <tr>
-                  <th className="py-3 px-4">Run Identifier</th>
-                  <th className="py-3 px-4">Pipeline Thread</th>
-                  <th className="py-3 px-4">Trigger Engine</th>
-                  <th className="py-3 px-4">Volume</th>
-                  <th className="py-3 px-4">Target Doc #</th>
-                  <th className="py-3 px-4">Duration</th>
-                  <th className="py-3 px-4">Clean Core Status</th>
+                  <th className="py-3.5 px-6">RUN ID</th>
+                  <th className="py-3.5 px-6">WORKFLOW</th>
+                  <th className="py-3.5 px-6">TRIGGER</th>
+                  <th className="py-3.5 px-6">VOLUME</th>
+                  <th className="py-3.5 px-6">TARGET DOC #</th>
+                  <th className="py-3.5 px-6">DURATION</th>
+                  <th className="py-3.5 px-6">STATUS</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E3E6EE]">
+              <tbody className="divide-y divide-[#F1F3F7]">
                 {filteredRuns.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-xs text-[#5F6678]">
                       <div className="max-w-xs mx-auto space-y-1">
-                        <p className="font-semibold text-slate-700">No pipeline runs recorded yet</p>
+                        <p className="font-semibold text-slate-700">No pipeline runs yet</p>
                         <p className="text-[11px] text-slate-400">
-                          Execute a dry run or live stream run from your connected pipeline to see telemetry and execution audit history here.
+                          Run a dry run or a live stream from a connected workflow to see history here.
                         </p>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  filteredRuns.map((run) => (
-                    <tr key={run.id} className="hover:bg-[#F9FAFC] transition-colors">
-                      <td className="py-3.5 px-4 font-mono font-bold text-[#0A0F1F]">{run.id}</td>
-                      <td className="py-3.5 px-4 font-medium text-[#0A0F1F]">{run.thread}</td>
-                      <td className="py-3.5 px-4 text-[#5F6678]">{run.trigger}</td>
-                      <td className="py-3.5 px-4 font-mono">{run.records}</td>
-                      <td className="py-3.5 px-4 font-mono text-[#2D55F5] font-semibold">{run.docNo}</td>
-                      <td className="py-3.5 px-4 text-[#5F6678]">{run.duration}</td>
-                      <td className="py-3.5 px-4">
-                        <Tag variant={run.variant}>{run.status}</Tag>
+                  filteredRuns.map((r) => (
+                    <tr key={r.id} className="hover:bg-[#F8FAFC] transition-colors">
+                      <td className="py-4 px-6 font-mono text-xs text-[#0A0F1F] whitespace-nowrap">
+                        {r.id}
+                      </td>
+                      <td className="py-4 px-6 font-bold text-[#0A0F1F] text-xs">
+                        {r.workflow || r.thread}
+                      </td>
+                      <td className="py-4 px-6 text-[#5F6678] font-medium text-xs">
+                        {r.trigger}
+                      </td>
+                      <td className="py-4 px-6 font-mono text-[#0A0F1F] text-xs">
+                        {r.volume || r.records}
+                      </td>
+                      <td className="py-4 px-6 font-mono text-xs text-[#5F6678]">
+                        {r.targetDoc || r.docNo || '—'}
+                      </td>
+                      <td className="py-4 px-6 font-mono text-xs text-[#0A0F1F]">
+                        {r.duration}
+                      </td>
+                      <td className="py-4 px-6 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          r.statusType === 'success' || r.status?.toLowerCase().includes('success')
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : r.statusType === 'remediated' || r.status?.toLowerCase().includes('remediated')
+                              ? 'bg-blue-50 text-[#2D55F5] border border-blue-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            r.statusType === 'success' || r.status?.toLowerCase().includes('success')
+                              ? 'bg-emerald-500'
+                              : r.statusType === 'remediated' || r.status?.toLowerCase().includes('remediated')
+                                ? 'bg-[#2D55F5]'
+                                : 'bg-amber-500'
+                          }`} />
+                          {r.status}
+                        </span>
                       </td>
                     </tr>
                   ))
@@ -236,20 +341,6 @@ export default function RunHistoryPage() {
           </div>
         </div>
       </main>
-
-      {/* Bottom Sticky Action Bar linking back to Threads */}
-      <div className="bg-white border-t border-[#E3E6EE] px-6 lg:px-8 py-3 sticky bottom-0 z-30 shadow-sm">
-        <div className="max-w-[1360px] mx-auto flex items-center justify-between">
-          <span className="text-xs text-[#5F6678]">
-            End of Pipeline Flow · Execution history saved to enterprise audit log
-          </span>
-          <Link to="threads">
-            <Button variant="primary" size="md">
-              ← Return to Threads Dashboard
-            </Button>
-          </Link>
-        </div>
-      </div>
-    </div>
+    </DataXAppShell>
   );
 }

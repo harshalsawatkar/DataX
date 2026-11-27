@@ -1,33 +1,143 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+const SCREEN_TITLES = {
+  threads: 'Workflows & Threads',
+  workflows: 'Workflows & Threads',
+  'new-workflow': 'New Autonomous Workflow',
+  'new-thread': 'New Autonomous Workflow',
+  templates: 'Domain Packs & Templates',
+  'domain-packs': 'Domain Packs & Templates',
+  connections: 'Enterprise Data Vault & Connectors',
+  'ai-firewall': 'AI Agent & RAG Pre-Embedding Data Firewall',
+  firewall: 'AI Agent & RAG Pre-Embedding Data Firewall',
+  'ml-certify': 'ML & LLM Fine-Tuning Dataset Certification',
+  'ml-gate': 'ML & LLM Fine-Tuning Dataset Certification',
+  'mapping-studio': 'Schema & Migration Studio',
+  'migration-studio': 'Schema & Migration Studio',
+  canvas: 'CleanFlow Studio Visual Canvas',
+  'workflow-builder': 'CleanFlow Studio Visual Canvas',
+  'rules-table': 'Rule Engine & AST Validator',
+  'running-dry-run': 'Executing Dual-Twin Dry Run',
+  'dry-run-results': 'Dry Run Verification Outcomes',
+  'live-auto-fix': 'Autonomous Live Remediation',
+  quarantine: 'Quarantine Workbench & DLQ',
+  audit: 'Immutable Audit Trail & Lineage',
+  shadow: 'Shadow Mode Dual-Pipeline Parity Certification',
+  'shadow-mode': 'Shadow Mode Dual-Pipeline Parity Certification',
+  'shadow-reconciler': 'Shadow Mode Dual-Pipeline Parity Certification',
+  parity: 'Shadow Mode Dual-Pipeline Parity Certification',
+  roi: 'Executive ROI & Board Compliance Dossier',
+  'roi-dossier': 'Executive ROI & Board Compliance Dossier',
+  'executive-roi': 'Executive ROI & Board Compliance Dossier',
+  settings: 'Platform Settings & RBAC',
+  help: 'Help Center & Documentation',
+  history: 'Pipeline Execution Telemetry',
+  runs: 'Pipeline Execution Telemetry',
+  login: 'Sign In',
+  register: 'Sign Up',
+  'legacy-poc': 'SAP BW S/4HANA Modernizer',
+  'schema-studio': 'Schema & Migration Studio',
+  'fmd-studio': 'Schema & Migration Studio'
+};
+
 const NavigationContext = createContext(null);
+const SCREEN_ALIASES = {
+  'migration-studio': 'mapping-studio',
+};
+
+const normalizeScreen = (screen) => SCREEN_ALIASES[screen] || screen;
+
+export function resolveScreenFromLocation(fallback = 'threads') {
+  if (typeof window === 'undefined') return fallback;
+
+  // 1. Check hash first (e.g. #settings, #ai-firewall, #history, #canvas?trace=...)
+  const rawHash = window.location.hash.replace('#', '').replace(/^\/+/, '');
+  const hash = rawHash.split('?')[0];
+  if (hash && hash !== 'poc') {
+    if (hash.startsWith('runs/') || hash.startsWith('run/')) {
+      return 'history';
+    }
+    return normalizeScreen(hash);
+  }
+
+  // 2. Check pathname (e.g. /datax/settings, /datax/ai-firewall, /settings)
+  const pathname = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length > 0) {
+    const last = segments[segments.length - 1].split('?')[0];
+    if (last && last !== 'datax' && last !== 'poc') {
+      if (last.startsWith('runs') || last.startsWith('run')) {
+        return 'history';
+      }
+      return normalizeScreen(last);
+    }
+  }
+
+  return fallback;
+}
+
+export const CANVAS_SCREENS = ['canvas', 'builder', 'workflow-builder'];
 
 export function NavigationProvider({ children, initialScreen = 'threads' }) {
-  const [currentScreen, setCurrentScreen] = useState(initialScreen);
+  const [currentScreen, setCurrentScreen] = useState(() => resolveScreenFromLocation(initialScreen));
+  const [canvasAction, setCanvasAction] = useState(null);
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
 
-  // Sync with window.location.hash
+  // Sync online / offline status
   useEffect(() => {
-    const handleHash = () => {
-      const hash = window.location.hash.replace('#', '').replace('/', '');
-      if (hash && hash !== 'poc') {
-        setCurrentScreen(hash);
-      }
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
-
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
+  // Sync with window.location.hash and window.location.pathname popstate
+  useEffect(() => {
+    const syncLocation = () => {
+      const target = resolveScreenFromLocation(initialScreen);
+      setCurrentScreen(target);
+    };
+
+    syncLocation();
+    window.addEventListener('hashchange', syncLocation);
+    window.addEventListener('popstate', syncLocation);
+    return () => {
+      window.removeEventListener('hashchange', syncLocation);
+      window.removeEventListener('popstate', syncLocation);
+    };
+  }, [initialScreen]);
+
+  // Dynamic Document Title Sync
+  useEffect(() => {
+    const cleanKey = currentScreen.toLowerCase();
+    const title = SCREEN_TITLES[cleanKey] || 'Enterprise Decision Intelligence';
+    document.title = `DataX | ${title}`;
+  }, [currentScreen]);
+
   const navigateTo = (screen) => {
-    const clean = screen.replace('/', '');
+    const rawClean = screen.replace('#', '').replace(/^\/+/, '').split('?')[0];
+    const clean = normalizeScreen ? normalizeScreen(rawClean) : rawClean;
     setCurrentScreen(clean || 'threads');
     window.location.hash = `#${clean || 'threads'}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const openCanvasAction = (action) => {
+    setCanvasAction(action);
+    if (!CANVAS_SCREENS.includes(currentScreen)) navigateTo('canvas');
+  };
+
   return (
-    <NavigationContext.Provider value={{ currentScreen, navigateTo }}>
+    <NavigationContext.Provider value={{ currentScreen, navigateTo, isOnline, canvasAction, openCanvasAction, clearCanvasAction: setCanvasAction }}>
+      {!isOnline && (
+        <div className="bg-amber-500 text-slate-900 text-xs font-bold px-4 py-2 text-center sticky top-0 z-50 flex items-center justify-center gap-2 shadow-md">
+          <span>⚠️ Offline Mode Active: You are currently disconnected. Changes will be saved locally and synchronized once connectivity resumes.</span>
+        </div>
+      )}
       {children}
     </NavigationContext.Provider>
   );
@@ -38,8 +148,9 @@ export function useNavigation() {
   if (!context) {
     return {
       currentScreen: 'threads',
+      isOnline: true,
       navigateTo: (to) => {
-        const clean = to.replace('/', '');
+        const clean = to.replace('#', '').replace(/^\/+/, '');
         window.location.hash = `#${clean || 'threads'}`;
       },
     };
@@ -57,7 +168,7 @@ export function Link({ to, children, className = '', onClick, ...props }) {
   };
 
   return (
-    <a href={`#${to.replace('/', '')}`} onClick={handleClick} className={className} {...props}>
+    <a href={`#${to.replace('#', '').replace(/^\/+/, '')}`} onClick={handleClick} className={className} {...props}>
       {children}
     </a>
   );
