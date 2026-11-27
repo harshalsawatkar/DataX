@@ -66,7 +66,7 @@ export default function CleanFlowStudio({ initialPage = '05', onSwitchToMarketin
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-[#f8fafc] text-slate-800 font-sans flex flex-col antialiased selection:bg-blue-500/20 selection:text-blue-700">
+    <div className="min-h-[var(--studio-content-height,calc(100vh-4rem))] bg-[#f8fafc] text-slate-800 font-sans flex flex-col antialiased selection:bg-blue-500/20 selection:text-blue-700">
       {/* 3-Node Pipeline Graph (Page 08 has its own live nodes) */}
       {currentPage !== '08' && (
         <PipelineFlowNodes

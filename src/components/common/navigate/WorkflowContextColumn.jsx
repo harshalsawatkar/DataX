@@ -1,43 +1,8 @@
 import React, { useState } from 'react';
 import { GitBranch, Check } from 'lucide-react';
 
-export const WORKFLOW_CATALOG = [
-  {
-    id: 'sap_bw_s4hana',
-    title: 'SAP BW → S/4HANA Clean Core',
-    rulesCount: 4,
-    status: 'Ready',
-    filterTag: 'live'
-  },
-  {
-    id: 'customer_master_reconciliation',
-    title: 'Customer Master & Identity',
-    rulesCount: 5,
-    status: 'Ready',
-    filterTag: 'live'
-  },
-  {
-    id: 'financial_gl_ledger',
-    title: 'Financial GL & AP Compliance',
-    rulesCount: 6,
-    status: 'Ready',
-    filterTag: 'draft'
-  },
-  {
-    id: 'healthcare_hipaa',
-    title: 'Healthcare Patient Master',
-    rulesCount: 4,
-    status: 'Ready',
-    filterTag: 'draft'
-  },
-  {
-    id: 'supply_chain_optimization',
-    title: 'Supply Chain Inventory Balancer',
-    rulesCount: 5,
-    status: 'Ready',
-    filterTag: 'live'
-  }
-];
+import { getWorkflows } from '../../../data/workflowCatalog';
+import { useRuleEngine } from '../../../context/RuleEngineContext';
 
 /**
  * WorkflowContextColumn - Right column workflow context and active thread selector (00.12)
@@ -49,10 +14,11 @@ export default function WorkflowContextColumn({
 }) {
   const [filterTab, setFilterTab] = useState('all');
 
-  const filteredWorkflows = WORKFLOW_CATALOG.filter(wf => {
+  const workflows = getWorkflows(useRuleEngine().threads);
+  const filteredWorkflows = workflows.filter(wf => {
     // Filter tab
-    if (filterTab === 'live' && wf.filterTag !== 'live') return false;
-    if (filterTab === 'draft' && wf.filterTag !== 'draft') return false;
+    if (filterTab === 'live' && wf.status !== 'Live') return false;
+    if (filterTab === 'draft' && wf.status === 'Live') return false;
 
     // Search query
     if (query) {
@@ -80,7 +46,7 @@ export default function WorkflowContextColumn({
                 : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F]'
             }`}
           >
-            All (5)
+            All ({workflows.length})
           </button>
           <button
             type="button"

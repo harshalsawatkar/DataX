@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigation } from '../../context/NavigationContext';
+import { getStudioRoute } from '../../data/studioRoutes';
 import { useRuleEngine } from '../../context/RuleEngineContext';
 
 // Modular Subcomponents matching 00.12 & 6.1b
@@ -12,12 +13,11 @@ import {
 } from './navigate';
 
 export default function NavigateFilterModal({ isOpen, onClose, onOpenAdvisor }) {
-  const { navigateTo } = useNavigation();
+  const { currentScreen, navigateTo, openCanvasAction } = useNavigation();
   const ruleEngine = useRuleEngine?.() || {};
   const { activeThread, selectThread } = ruleEngine;
 
   const [query, setQuery] = useState('');
-  const [activeModuleId, setActiveModuleId] = useState('workflows');
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(() => {
     return activeThread?.id || activeThread?.packKey || 'sap_bw_s4hana';
   });
@@ -55,9 +55,10 @@ export default function NavigateFilterModal({ isOpen, onClose, onOpenAdvisor }) 
   }, [isOpen, onClose]);
 
   const handleSelectModule = (item) => {
-    setActiveModuleId(item.id);
     onClose();
-    if (item.screen) {
+    if (item.action) {
+      openCanvasAction(item.action);
+    } else if (item.screen) {
       navigateTo(item.screen);
     }
   };
@@ -73,7 +74,6 @@ export default function NavigateFilterModal({ isOpen, onClose, onOpenAdvisor }) 
 
   const handleClearFilters = () => {
     setQuery('');
-    setActiveModuleId('workflows');
   };
 
   if (!isOpen) return null;
@@ -81,7 +81,7 @@ export default function NavigateFilterModal({ isOpen, onClose, onOpenAdvisor }) 
   return (
     <AnimatePresence>
       <div 
-        className="fixed inset-0 z-50 bg-slate-900/25 backdrop-blur-[2px] transition-opacity flex items-start justify-end p-2 sm:p-4 md:p-6"
+        className="fixed inset-0 z-50 bg-transparent transition-opacity flex items-start justify-end pt-[68px] pb-4 px-2 sm:px-6 lg:px-8"
         role="dialog"
         aria-modal="true"
         onClick={onClose}
@@ -92,7 +92,7 @@ export default function NavigateFilterModal({ isOpen, onClose, onOpenAdvisor }) 
           exit={{ opacity: 0, scale: 0.97, y: -8 }}
           transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
           onClick={e => e.stopPropagation()}
-          className="mt-12 sm:mt-14 w-full max-w-[calc(100vw-24px)] sm:w-[680px] lg:w-[720px] max-h-[calc(100vh-70px)] sm:max-h-[min(580px,86vh)] bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl shadow-2xl shadow-slate-900/20 p-4 sm:p-5 text-left font-sans flex flex-col overflow-hidden"
+          className="w-full max-w-[calc(100vw-16px)] sm:w-[680px] lg:w-[820px] max-h-[calc(100vh-84px)] sm:max-h-[min(600px,86vh)] bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl shadow-2xl shadow-slate-900/20 p-4 sm:p-5 text-left font-sans flex flex-col overflow-hidden"
         >
           {/* Header & Search Bar */}
           <div className="shrink-0">
@@ -109,7 +109,7 @@ export default function NavigateFilterModal({ isOpen, onClose, onOpenAdvisor }) 
             {/* Left Column: Platform Directory */}
             <div className="pr-0 md:pr-4 overflow-y-auto no-scrollbar max-h-[min(380px,46vh)]">
               <PlatformDirectoryColumn 
-                activeModuleId={activeModuleId}
+                activeSection={getStudioRoute(currentScreen).section}
                 onSelectModule={handleSelectModule}
                 query={query}
               />

@@ -21,7 +21,7 @@ export function PulseMonitorIcon({ className = "w-16 h-14" }) {
           width="58" 
           height="42" 
           rx="12" 
-          fill="#0B132B" 
+          fill="white" 
           stroke="#0A0F1F" 
           strokeWidth="3.5" 
         />
@@ -35,19 +35,19 @@ export function PulseMonitorIcon({ className = "w-16 h-14" }) {
         />
       </svg>
       {/* Lime / Yellow Status Dot on top-right corner */}
-      <span className="absolute top-0 -right-1 w-3.5 h-3.5 rounded-full bg-[#D4FF3A] border-2 border-white dark:border-[#18181C] shadow-xs" />
+      <span className="absolute top-0 -right-1 w-3.5 h-3.5 rounded-full bg-[#D4FF3A] border-2 border-[#0A0F1F] dark:border-[#18181C] shadow-xs" />
     </div>
   );
 }
 
-export default function WorkflowsEmptyState({ onShowReady, onNewWorkflow }) {
+export default function WorkflowsEmptyState({ onShowReady, onNewWorkflow, searching }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2 }}
-      className="bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-[24px] p-12 sm:p-20 text-center flex flex-col items-center justify-center shadow-xs"
+      className="min-h-[360px] bg-[#EEF2FF] dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-[24px] p-12 sm:p-20 text-center flex flex-col items-center justify-center shadow-xs"
     >
       {/* Pulse Monitor Illustration */}
       <div className="mb-4">
@@ -56,12 +56,12 @@ export default function WorkflowsEmptyState({ onShowReady, onNewWorkflow }) {
 
       {/* Main Empty State Header */}
       <h3 className="text-xl sm:text-[22px] font-bold text-[#0A0F1F] dark:text-white tracking-tight">
-        No live workflows yet
+        {searching ? 'No matching workflows' : 'No live workflows yet'}
       </h3>
 
       {/* Descriptive Subtitle */}
       <p className="text-sm text-[#5F6678] dark:text-slate-400 max-w-md mx-auto mt-2 leading-relaxed">
-        A workflow goes live after a passing dry run. Open a ready workflow and run it, or start a new one.
+        {searching ? 'Try another name, domain or table.' : 'A workflow goes live after a passing dry run. Open a ready workflow and run it, or start a new one.'}
       </p>
 
       {/* Action Buttons Row */}
@@ -69,7 +69,7 @@ export default function WorkflowsEmptyState({ onShowReady, onNewWorkflow }) {
         <button
           type="button"
           onClick={onShowReady}
-          className="px-5 py-2.5 rounded-full border border-[#CDD2DE] dark:border-white/[0.12] bg-white dark:bg-white/[0.04] hover:bg-[#F8FAFC] dark:hover:bg-white/[0.08] text-[#0A0F1F] dark:text-white text-sm font-medium transition-all shadow-xs cursor-pointer"
+          className="px-5 py-2.5 rounded-xl border border-[#CDD2DE] dark:border-white/[0.12] bg-white dark:bg-white/[0.04] hover:bg-[#F8FAFC] dark:hover:bg-white/[0.08] text-[#0A0F1F] dark:text-white text-sm font-medium transition-all shadow-xs cursor-pointer"
         >
           Show ready workflows
         </button>
@@ -77,7 +77,7 @@ export default function WorkflowsEmptyState({ onShowReady, onNewWorkflow }) {
         <button
           type="button"
           onClick={onNewWorkflow}
-          className="px-5 py-2.5 rounded-full bg-[#2D55F5] hover:bg-[#1E44D6] text-white text-sm font-medium transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+          className="px-5 py-2.5 rounded-xl bg-[#2D55F5] hover:bg-[#1E44D6] text-white text-sm font-medium transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
           <span>New workflow</span>

@@ -77,23 +77,25 @@ export const resolveEngineKey = (dbType = '') => {
 export const sanitizeNode = (n) => {
   if (!n) return n;
   const node = { ...n };
+  if (node.type === 'file_upload') node.type = 'source';
   if (node.title === 'AI Rules Engine' || node.title === 'AI Rule Engine') {
-    node.title = 'Intelligence Engine';
+    node.title = 'Intelligence engine';
   }
   if (node.type === 'rag' || (node.title && node.title.toLowerCase().includes('rag'))) {
     node.type = 'rag';
-    node.title = 'RAG Context Enricher';
-    node.system = 'RAG';
+    if (!node.title) node.title = 'RAG Context Enricher';
+    if (!node.system) node.system = 'RAG Policy Library';
     if (node.table && node.table.toLowerCase().includes('hybrid')) {
       node.table = 'Knowledge Store';
     }
   }
   if (node.type === 'conditional' || (node.title && (node.title.includes('Conditional') || node.title.includes('Switch')))) {
     node.type = 'conditional';
-    node.title = 'Conditional Router (If / Else)';
-    node.system = 'If-Else Router';
-    if (node.system && node.system.includes('TOTAL_AMOUNT')) {
-      node.system = 'If-Else Router';
+    if (!node.title || node.title === 'Conditional Router' || node.title === 'Conditional Router (If / Else)') {
+      node.title = 'If / else router';
+    }
+    if (!node.system || node.system === 'If-Else Router') {
+      node.system = 'TOTAL_AMOUNT > 50,000';
     }
     if (node.table && node.table.includes('50000200')) {
       node.table = 'Configured';

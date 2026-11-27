@@ -17,14 +17,14 @@ export default function UseCasesSection({ onOpenDemo }) {
       style={{
         position: 'relative',
         background: '#FFFFFF',
-        paddingTop: 120,
-        paddingBottom: 120,
+        paddingTop: 128,
+        paddingBottom: 128,
         borderTop: '1px solid #E3E6EE',
         borderBottom: '1px solid #E3E6EE',
         fontFamily: "'Geist', sans-serif",
       }}
     >
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
+      <div style={{ maxWidth: 1248, margin: '0 auto', padding: '0 24px' }}>
         {/* Header */}
         <div
           style={{
@@ -33,20 +33,19 @@ export default function UseCasesSection({ onOpenDemo }) {
             alignItems: 'flex-end',
             justifyContent: 'space-between',
             gap: 20,
-            marginBottom: 48,
+            marginBottom: 64,
           }}
         >
-          <div>
+          <div className="flex flex-col items-start gap-4">
             <span
               style={{
                 display: 'inline-block',
                 fontSize: 12,
                 fontWeight: 600,
                 lineHeight: '130%',
-                letterSpacing: '0.04em',
+                letterSpacing: 0,
                 color: '#2D55F5',
                 textTransform: 'uppercase',
-                marginBottom: 12,
               }}
             >
               WHERE TEAMS START
@@ -54,6 +53,7 @@ export default function UseCasesSection({ onOpenDemo }) {
             <h2
               style={{
                 margin: 0,
+                fontFamily: 'inherit',
                 fontSize: 'clamp(36px, 4.5vw, 56px)',
                 fontWeight: 600,
                 lineHeight: '102%',
@@ -73,7 +73,8 @@ export default function UseCasesSection({ onOpenDemo }) {
               gap: 8,
               background: 'transparent',
               border: 'none',
-              padding: 0,
+              padding: '9px 16px',
+              lineHeight: 1.5,
               fontSize: 14,
               fontWeight: 500,
               color: '#474F61',

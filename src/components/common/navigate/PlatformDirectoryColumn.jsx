@@ -1,4 +1,5 @@
 import React from 'react';
+import { getStudioRoute } from '../../../data/studioRoutes';
 import { 
   GitBranch, 
   Shield, 
@@ -12,7 +13,7 @@ import {
   Lock, 
   FileText, 
   SlidersHorizontal,
-  FileSpreadsheet
+  FileSpreadsheet, Plus, Sparkles, ShieldCheck, Pencil, Workflow
 } from 'lucide-react';
 
 export const DIRECTORY_SECTIONS = [
@@ -23,6 +24,16 @@ export const DIRECTORY_SECTIONS = [
       { id: 'ai_firewall', label: 'AI Firewall', icon: Shield, screen: 'ai-firewall' },
       { id: 'ml_certify', label: 'ML Certify', icon: Cpu, screen: 'ml-certify' },
       { id: 'connections', label: 'Connections', icon: Plug, screen: 'connections', badge: '5' }
+    ]
+  },
+  {
+    group: 'CANVAS ACTIONS',
+    items: [
+      { id: 'add-node', label: 'Add a node', icon: Plus, action: 'add-node' },
+      { id: 'build-with-ai', label: 'Build with AI', icon: Sparkles, action: 'build-with-ai' },
+      { id: 'preflight', label: 'Pre-flight check', icon: ShieldCheck, action: 'preflight' },
+      { id: 'insert-node', label: 'Insert between nodes', icon: Workflow, action: 'insert-node' },
+      { id: 'edit-rule', label: 'Edit rule', icon: Pencil, action: 'edit-rule' }
     ]
   },
   {
@@ -50,7 +61,7 @@ export const DIRECTORY_SECTIONS = [
  * PlatformDirectoryColumn - Left column directory tree (00.12)
  */
 export default function PlatformDirectoryColumn({
-  activeModuleId,
+  activeSection,
   onSelectModule,
   query
 }) {
@@ -74,13 +85,15 @@ export default function PlatformDirectoryColumn({
           <div className="grid grid-cols-2 gap-x-2 gap-y-1">
             {sec.items.map(item => {
               const Icon = item.icon;
-              const isSelected = activeModuleId === item.id;
+              const isSelected = item.screen && activeSection === getStudioRoute(item.screen).section;
 
               return (
-                <div
+                <button
                   key={item.id}
+                  type="button"
+                  aria-current={isSelected ? 'location' : undefined}
                   onClick={() => onSelectModule(item)}
-                  className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                  className={`flex min-w-0 items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
                     isSelected
                       ? 'bg-[#F0F4FF] dark:bg-blue-950/30 text-[#2D55F5] dark:text-blue-400'
                       : 'text-[#0A0F1F] dark:text-slate-200 hover:bg-[#F5F6FA] dark:hover:bg-white/[0.04]'
@@ -100,7 +113,7 @@ export default function PlatformDirectoryColumn({
                       {item.badge}
                     </span>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>

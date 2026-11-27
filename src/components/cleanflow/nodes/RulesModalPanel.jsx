@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Sparkles,
   Plus,
-  Trash2,
+  Trash2, Pencil,
   Database,
   CheckSquare,
   Square,
@@ -23,6 +23,7 @@ import {
 export default function RulesModalPanel({
   rulesPrompt,
   setRulesPrompt,
+  governanceMode, setGovernanceMode, onEditRule,
   autoFixActive,
   setAutoFixActive,
   rulesGenerating,
@@ -59,7 +60,6 @@ export default function RulesModalPanel({
   }, [discoveredColumns, previewRows]);
 
   const [selectedColumns, setSelectedColumns] = useState(availableColumns);
-  const [governanceMode, setGovernanceMode] = useState('balanced'); // 'balanced' | 'strict' | 'remediate'
   const [isDraftingPrompt, setIsDraftingPrompt] = useState(false);
   const [isManualMode, setIsManualMode] = useState(false);
   const [aiProfile, setAiProfile] = useState(null);
@@ -183,11 +183,11 @@ export default function RulesModalPanel({
       <div className="p-3.5 rounded-xl bg-slate-50/90 border border-slate-200/90 space-y-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-md bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center shadow-2xs">
+            <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shadow-2xs">
               1
             </span>
             <span className="text-xs font-bold text-slate-900">
-              AI Schema & Live Data Analysis Scope
+              Analysis scope
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -212,13 +212,13 @@ export default function RulesModalPanel({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-semibold text-slate-600">
-                Select Columns for AI Prompt Drafting & Rule Synthesis ({selectedColumns.length} of {availableColumns.length} selected):
+                Columns for rule drafting ({selectedColumns.length} of {availableColumns.length} selected):
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleSelectAllColumns}
-                  className="text-[10px] font-bold text-purple-600 hover:text-purple-800 cursor-pointer"
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
                 >
                   Select All
                 </button>
@@ -246,7 +246,7 @@ export default function RulesModalPanel({
                     onClick={() => handleToggleColumn(col)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
                       isSelected
-                        ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -309,11 +309,11 @@ export default function RulesModalPanel({
       <div className="space-y-2.5">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <label className="text-xs font-bold text-slate-900 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-md bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center shadow-2xs">
+            <span className="w-5 h-5 rounded-md bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shadow-2xs">
               2
             </span>
-            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-            <span>AI-Drafted Natural Language Rules Prompt</span>
+            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+            <span>Rules prompt</span>
             {isManualMode ? (
               <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                 Manual Prompt Mode
@@ -331,7 +331,7 @@ export default function RulesModalPanel({
               type="button"
               onClick={handleAutoDraftPrompt}
               disabled={isDraftingPrompt}
-              className="px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
               title="Analyze selected columns and sample data to auto-draft prompt"
             >
               <Wand2 className={`w-3 h-3 ${isDraftingPrompt ? 'animate-spin' : ''}`} />
@@ -357,7 +357,7 @@ export default function RulesModalPanel({
             setRulesPrompt(e.target.value);
           }}
           placeholder={`Write your custom rules prompt for ${srcTable || 'this table'} (e.g., "${selectedColumns[0] || 'id'} is mandatory and unique. ${selectedColumns[1] || 'email'} must be valid format and trimmed...")`}
-          className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/25 focus:border-purple-500 transition-all"
+          className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition-all"
         />
 
         {/* AI Smart Suggestion Chips */}
@@ -372,7 +372,7 @@ export default function RulesModalPanel({
                   key={idx}
                   type="button"
                   onClick={() => handleAppendChip(chip.clause)}
-                  className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 border border-slate-200 hover:border-purple-200 text-[10px] font-semibold transition-colors cursor-pointer"
+                  className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 text-[10px] font-semibold transition-colors cursor-pointer"
                 >
                   {chip.label}
                 </button>
@@ -382,56 +382,26 @@ export default function RulesModalPanel({
         )}
 
         {/* Governance Preset & Primary Generate Rules Action Bar */}
-        <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Auto-Fix Remediation Toggle */}
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={autoFixActive}
-                onChange={(e) => setAutoFixActive(e.target.checked)}
-                className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-              />
-              <span className="text-xs font-semibold text-slate-700">
-                Enable Autonomous Auto-Fix
-              </span>
-            </label>
-
-            {/* AI Governance Strictness Mode */}
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              <SlidersHorizontal className="w-3 h-3 text-slate-500 ml-1.5" />
-              {[
-                { id: 'balanced', label: 'Balanced' },
-                { id: 'strict', label: 'Strict Quarantine' },
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setGovernanceMode(m.id)}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer transition-colors ${
-                    governanceMode === m.id
-                      ? 'bg-white text-slate-900 shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
+        <div className="space-y-3">
+          <div className="text-xs font-semibold">Remediation mode</div>
+          <div className="grid grid-cols-3 rounded-full bg-slate-100 p-1">
+            {[['remediate', 'Auto-fix'], ['balanced', 'Balanced'], ['strict', 'Strict quarantine']].map(([value, label]) =>
+              <button key={value} type="button" aria-pressed={governanceMode === value}
+                onClick={() => { setGovernanceMode(value); setAutoFixActive(value !== 'strict'); }}
+                className={`rounded-full py-1.5 text-xs ${governanceMode === value ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'}`}>{label}</button>)}
           </div>
-
           <button
             type="button"
             onClick={handleGenerateRulesFromPrompt}
             disabled={rulesGenerating}
-            className="px-4 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+            className="w-full justify-center px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
           >
             {rulesGenerating ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <Sparkles className="w-3.5 h-3.5" />
             )}
-            {rulesGenerating ? 'Generating Rules from Prompt...' : 'Generate Rules from Prompt'}
+            {rulesGenerating ? 'Generating Rules from Prompt...' : 'Generate rules from prompt'}
           </button>
         </div>
       </div>
@@ -443,7 +413,7 @@ export default function RulesModalPanel({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-800">
-              Generated & Active Rules ({rulesList.filter((r) => r.selected !== false).length} of {rulesList.length} enabled)
+              Active rules ({rulesList.filter((r) => r.selected !== false).length} of {rulesList.length} enabled)
             </span>
           </div>
           <button
@@ -574,6 +544,7 @@ export default function RulesModalPanel({
                     </p>
                   )}
                 </div>
+                <button type="button" aria-label={`Edit ${rule.name}`} title="Edit rule" className="p-1 text-slate-500 hover:text-blue-600" onClick={() => onEditRule(rule)}><Pencil size={14}/></button>
                 <button
                   type="button"
                   onClick={() => handleDeleteRuleItem(rule.id)}

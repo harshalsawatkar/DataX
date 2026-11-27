@@ -459,7 +459,7 @@ export default function FmdTemplateGallery({
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)] w-full overflow-y-auto bg-[#F8FAFC] dark:bg-[#0E1015] font-sans">
+    <div className="h-[var(--studio-content-height,calc(100vh-4rem))] w-full overflow-y-auto bg-[#F8FAFC] dark:bg-[#0E1015] font-sans">
       <div className="max-w-[1360px] mx-auto px-5 sm:px-8 py-6 space-y-6">
         {/* Top Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">

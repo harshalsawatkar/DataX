@@ -182,9 +182,9 @@ export default function DataXAuthPage({ initialMode = 'login', onBackToWebsite }
         ) : (
           /* Sign In / Register Card */
           <div className="w-full max-w-[440px]">
-            <div className="bg-white border border-[#E3E6EE] rounded-[20px] p-7 sm:p-9 shadow-sm">
+            <div className="bg-white border border-[#E3E6EE] rounded-[20px] p-8 shadow-[0_2px_4px_-1px_rgba(14,16,20,0.05),0_8px_24px_-4px_rgba(14,16,20,0.08)]">
               {/* Header Title & Subtitle */}
-              <div className="mb-6">
+              <div className="mb-5">
                 <h1 className="text-[24px] font-bold text-[#0A0F1F] tracking-tight leading-tight">
                   {mode === 'login' ? 'Sign in to DataX' : 'Create your DataX account'}
                 </h1>
@@ -238,10 +238,10 @@ export default function DataXAuthPage({ initialMode = 'login', onBackToWebsite }
               )}
 
               {/* Form Fields */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-5">
                 {mode === 'register' && (
                   <div>
-                    <label className="block text-xs font-semibold text-[#0A0F1F] mb-1.5">
+                    <label className="block text-[13px] leading-[19px] font-medium text-[#0A0F1F] mb-1.5">
                       Full name
                     </label>
                     <div className="relative flex items-center">
@@ -254,14 +254,14 @@ export default function DataXAuthPage({ initialMode = 'login', onBackToWebsite }
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
                         placeholder="e.g. Jane Doe"
-                        className="w-full h-10 pl-10 pr-3.5 rounded-[10px] bg-white border border-[#CDD2DE] text-xs sm:text-sm text-[#0A0F1F] placeholder:text-[#5F6678]/60 focus:outline-none focus:border-[#2D55F5] focus:ring-1 focus:ring-[#2D55F5] transition-all"
+                        className="w-full h-10 pl-10 pr-3.5 rounded-[10px] bg-white border border-[#CDD2DE] text-[14px] text-[#0A0F1F] placeholder:text-[#5F6678]/60 focus:outline-none focus:border-[#2D55F5] focus:ring-1 focus:ring-[#2D55F5] transition-all"
                       />
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#0A0F1F] mb-1.5">
+                  <label className="block text-[13px] leading-[19px] font-medium text-[#0A0F1F] mb-1.5">
                     Work email
                   </label>
                   <div className="relative flex items-center">
@@ -277,13 +277,13 @@ export default function DataXAuthPage({ initialMode = 'login', onBackToWebsite }
                         if (authError && setAuthError) setAuthError(null);
                       }}
                       placeholder="name@company.com"
-                      className="w-full h-10 pl-10 pr-3.5 rounded-[10px] bg-white border border-[#CDD2DE] text-xs sm:text-sm text-[#0A0F1F] placeholder:text-[#5F6678]/60 focus:outline-none focus:border-[#2D55F5] focus:ring-1 focus:ring-[#2D55F5] transition-all"
+                      className="w-full h-10 pl-10 pr-3.5 rounded-[10px] bg-white border border-[#CDD2DE] text-[14px] text-[#0A0F1F] placeholder:text-[#5F6678]/60 focus:outline-none focus:border-[#2D55F5] focus:ring-1 focus:ring-[#2D55F5] transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#0A0F1F] mb-1.5">
+                  <label className="block text-[13px] leading-[19px] font-medium text-[#0A0F1F] mb-1.5">
                     Password
                   </label>
                   <div className="relative flex items-center">
@@ -297,7 +297,7 @@ export default function DataXAuthPage({ initialMode = 'login', onBackToWebsite }
                         if (authError && setAuthError) setAuthError(null);
                       }}
                       placeholder="••••••••"
-                      className={`w-full h-10 pl-10 pr-10 rounded-[10px] bg-white border text-xs sm:text-sm text-[#0A0F1F] placeholder:text-[#5F6678]/60 focus:outline-none transition-all ${
+                      className={`w-full h-10 pl-10 pr-10 rounded-[10px] bg-white border text-[14px] text-[#0A0F1F] placeholder:text-[#5F6678]/60 focus:outline-none transition-all ${
                         isInputInError 
                           ? 'border-[#C2362F] ring-1 ring-[#C2362F]/30 focus:border-[#C2362F]' 
                           : 'border-[#CDD2DE] focus:border-[#2D55F5] focus:ring-1 focus:ring-[#2D55F5]'
@@ -321,7 +321,7 @@ export default function DataXAuthPage({ initialMode = 'login', onBackToWebsite }
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full h-10 mt-2 rounded-full bg-[#2D55F5] hover:bg-blue-600 active:scale-[0.99] text-white font-medium text-xs sm:text-sm transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                  className="w-full h-[39px] px-4 py-[9px] rounded-[10px] bg-[#2D55F5] hover:bg-[#1E44D6] active:scale-[0.99] text-white font-medium text-[14px] leading-[21px] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                 >
                   {isSubmitting ? (
                     <>

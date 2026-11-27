@@ -26,6 +26,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { useNavigation } from '../../context/NavigationContext';
+import { getStudioRoute } from '../../data/studioRoutes';
 import { useRuleEngine } from '../../context/RuleEngineContext';
 import Logo from '../icons/Logo';
 import NotificationCenter from './NotificationCenter';
@@ -151,32 +152,17 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
     { id: 'settings', label: 'Settings & RBAC', screen: 'settings', icon: Settings, desc: 'Tenant, SSO, Cron & API Keys' },
   ];
 
-  const isNavActive = (screenKey) => {
-    if (screenKey === 'workflows' && (currentScreen === 'workflows' || currentScreen === 'threads' || currentScreen === 'home' || currentScreen === '')) return true;
-    if (screenKey === 'ai-firewall' && (currentScreen === 'ai-firewall' || currentScreen === 'firewall' || currentScreen === 'rag-firewall' || currentScreen === 'agent-guard')) return true;
-    if (screenKey === 'ml-certify' && (currentScreen === 'ml-certify' || currentScreen === 'ml-certification' || currentScreen === 'ml-gate')) return true;
-    if (screenKey === 'mapping-studio' && (currentScreen === 'mapping-studio' || currentScreen === 'schema-studio' || currentScreen === 'migration-studio' || currentScreen === 'fmd' || currentScreen === 'fmd-mapping')) return true;
-    if (screenKey === 'canvas' && (currentScreen === 'canvas' || currentScreen === 'workflow-builder' || currentScreen === 'connect-source' || currentScreen === 'generate-rules' || currentScreen === 'rules')) return true;
-    if (screenKey === 'templates' && (currentScreen === 'templates' || currentScreen === 'domain-packs')) return true;
-    if (screenKey === 'history' && (currentScreen === 'history' || currentScreen === 'runs')) return true;
-    return currentScreen === screenKey;
-  };
-
-  const allNavItems = [...CORE_PILLARS, ...PIPELINE_OPERATIONS, ...GOVERNANCE_ITEMS];
-  const activeNavObj = allNavItems.find(item => isNavActive(item.screen)) || CORE_PILLARS[0];
+  const studioRoute = getStudioRoute(currentScreen);
+  const isNavActive = screen => studioRoute.section === screen || (screen === 'mapping-studio' && ['mapping-studio', 'schema-studio', 'migration-studio', 'fmd', 'fmd-mapping'].includes(studioRoute.section));
+  const isCanvasScreen = studioRoute.usesCanvas;
+  const showNewWorkflow = studioRoute.showCreate || isCanvasScreen;
 
   const getBreadcrumbLabel = () => {
-    if (currentScreen === 'new-workflow' || currentScreen === 'start-workflow' || currentScreen === 'new-thread' || currentScreen === 'start-thread') {
-      return 'New workflow';
-    }
-    if (currentScreen === 'canvas' || currentScreen === 'workflow-builder') {
-      return 'Visual Canvas';
-    }
-    return activeNavObj.label;
+    return studioRoute.label;
   };
 
   // Show active pipeline context bar automatically on studio/operation screens
-  const shouldShowPipelinePicker = showContextBar || ['canvas', 'quarantine', 'shadow', 'audit', 'history', 'running-dry-run', 'dry-run-results', 'live-auto-fix'].includes(currentScreen);
+  const shouldShowPipelinePicker = showContextBar || isCanvasScreen || ['quarantine', 'shadow', 'audit', 'history'].includes(studioRoute.section) || currentScreen === 'live-auto-fix';
 
   const renderSidebarNavButton = (item) => {
     const active = isNavActive(item.screen);
@@ -234,9 +220,9 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
       <AmbientBackgroundFlow />
 
       {/* 2. Full-Width Main Content Viewport */}
-      <div className="min-h-screen flex flex-col relative z-10 w-full">
+      <div className="min-h-screen flex flex-col relative z-10 w-full [--studio-breadcrumb-height:3.5rem] [--studio-content-height:calc(100dvh_-_3.5rem_-_var(--studio-breadcrumb-height))]">
         {/* Top Navigation Header matching Screenshot */}
-        <header className="sticky top-0 z-30 w-full h-16 bg-white dark:bg-[#18181C] border-b border-[#E3E6EE] dark:border-white/[0.08] px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4 transition-colors shrink-0">
+        <header className="sticky top-0 z-30 w-full h-14 bg-white dark:bg-[#18181C] border-b border-[#E3E6EE] dark:border-white/[0.08] px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4 transition-colors shrink-0">
           {/* Left: Brand Logo & Segmented 4-Tab Navigation */}
           <div className="flex items-center gap-4 min-w-0">
             <button
@@ -250,12 +236,12 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
             </button>
 
             {/* Segmented Pill Navigation: Threads, Domain packs, Connections, Runs */}
-            <div className="hidden md:inline-flex items-center bg-[#F2F4F7] dark:bg-white/[0.06] p-1 rounded-full text-xs font-medium">
+            {!isCanvasScreen && <div className="hidden md:inline-flex items-center bg-[#F2F4F7] dark:bg-white/[0.06] p-1 rounded-full text-xs font-medium">
               <button
                 type="button"
                 onClick={() => navigateTo('workflows')}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                  (currentScreen === 'workflows' || currentScreen === 'threads' || currentScreen === 'home' || currentScreen === '')
+                  isNavActive('workflows')
                     ? 'bg-white dark:bg-[#2A2B32] text-[#2D55F5] font-semibold shadow-xs'
                     : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F] dark:hover:text-white'
                 }`}
@@ -268,7 +254,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
                 type="button"
                 onClick={() => navigateTo('templates')}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                  (currentScreen === 'templates' || currentScreen === 'domain-packs')
+                  isNavActive('templates')
                     ? 'bg-white dark:bg-[#2A2B32] text-[#2D55F5] font-semibold shadow-xs'
                     : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F] dark:hover:text-white'
                 }`}
@@ -281,7 +267,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
                 type="button"
                 onClick={() => navigateTo('connections')}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                  currentScreen === 'connections'
+                  isNavActive('connections')
                     ? 'bg-white dark:bg-[#2A2B32] text-[#2D55F5] font-semibold shadow-xs'
                     : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F] dark:hover:text-white'
                 }`}
@@ -294,7 +280,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
                 type="button"
                 onClick={() => navigateTo('history')}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
-                  (currentScreen === 'history' || currentScreen === 'runs')
+                  isNavActive('history')
                     ? 'bg-white dark:bg-[#2A2B32] text-[#2D55F5] font-semibold shadow-xs'
                     : 'text-[#5F6678] dark:text-slate-400 hover:text-[#0A0F1F] dark:hover:text-white'
                 }`}
@@ -302,7 +288,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
                 <Activity className="w-3.5 h-3.5" />
                 <span>Runs</span>
               </button>
-            </div>
+            </div>}
 
             {/* Active Pipeline Quick Selector Dropdown */}
             {shouldShowPipelinePicker && (
@@ -321,9 +307,11 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
                   {threadPickerOpen && (
                     <div className="absolute top-full left-0 mt-1.5 w-72 bg-white dark:bg-[#222226] border border-[#E3E6EE] dark:border-white/[0.1] rounded-xl shadow-xl py-1 z-50">
                       {(threads.length > 0 ? threads : [
-                        { id: 'sap_bw_s4hana', name: 'SAP BW InfoCube 0PUR_C01 → S/4HANA' },
-                        { id: 'salesforce_snowflake', name: 'Salesforce Opportunity → Snowflake Lakehouse' },
-                        { id: 'oracle_neon', name: 'Oracle Financials General Ledger → Neon Postgres' }
+                        { id: 'sap_bw_s4hana', name: 'SAP BW → S/4HANA Clean Core' },
+                        { id: 'customer_master_reconciliation', name: 'Customer Master & Identity' },
+                        { id: 'financial_gl_ledger', name: 'Financial GL & AP Ledger' },
+                        { id: 'healthcare_hipaa', name: 'Healthcare Patient Master' },
+                        { id: 'supply_chain_inventory', name: 'Supply Chain Inventory Balancer' }
                       ]).map((t) => (
                         <button
                           key={t.id}
@@ -338,7 +326,7 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
                               : 'hover:bg-slate-50 dark:hover:bg-white/[0.05] text-slate-700 dark:text-slate-300'
                           }`}
                         >
-                          {t.name}
+                          {t.name || t.title}
                         </button>
                       ))}
                     </div>
@@ -351,8 +339,8 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
           {/* Right: Search Bar, Navigate Dropdown, Help, Notification Bell, User Avatar */}
           <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             {/* Search Input Bar */}
-            <div className="w-56 sm:w-64 lg:w-72">
-              <HeaderSearchBar placeholder="Search threads, tables..." />
+            <div className={isCanvasScreen ? 'hidden lg:block lg:w-44 xl:w-64' : 'w-56 sm:w-64 lg:w-72'}>
+              <HeaderSearchBar placeholder={isCanvasScreen ? 'Search workflows, rules...' : 'Search threads, tables...'} />
             </div>
 
             {/* Navigation & Filter Dropdown Trigger Button */}
@@ -393,8 +381,32 @@ function DataXMasterLayout({ children, showContextBar = false, onSwitchToMarketi
           </div>
         </header>
 
-        {/* Main Viewport Page Content */}
-        <main className="flex-1 w-full">
+        <div
+          className="flex shrink-0 items-center justify-between gap-3 bg-white px-4 sm:px-8 dark:bg-[#18181C]"
+          style={{ minHeight: 'var(--studio-breadcrumb-height)' }}
+        >
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-xs sm:text-sm">
+            <a href="#workflows" className="shrink-0 text-[#5F6678] hover:text-[#2D55F5] dark:text-slate-400">
+              Studio
+            </a>
+            <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-[#687287] dark:text-slate-400" />
+            <span aria-current="page" className="font-semibold text-[#0A0F1F] dark:text-white">
+              {studioRoute.label}
+            </span>
+          </nav>
+          {showNewWorkflow && (
+            <button
+              type="button"
+              onClick={() => navigateTo(isCanvasScreen ? 'start-thread?from=canvas' : 'start-thread')}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#2D55F5] px-3 text-xs font-semibold text-white hover:bg-[#2045DC] sm:px-4"
+            >
+              <Plus aria-hidden="true" className="size-4" />
+              New workflow
+            </button>
+          )}
+        </div>
+
+        <main className="flex-1 w-full min-w-0">
           {children}
         </main>
       </div>

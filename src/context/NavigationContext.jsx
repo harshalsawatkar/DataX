@@ -71,8 +71,11 @@ export function resolveScreenFromLocation(fallback = 'threads') {
   return fallback;
 }
 
+export const CANVAS_SCREENS = ['canvas', 'builder', 'workflow-builder'];
+
 export function NavigationProvider({ children, initialScreen = 'threads' }) {
   const [currentScreen, setCurrentScreen] = useState(() => resolveScreenFromLocation(initialScreen));
+  const [canvasAction, setCanvasAction] = useState(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
 
   // Sync online / offline status
@@ -112,13 +115,18 @@ export function NavigationProvider({ children, initialScreen = 'threads' }) {
 
   const navigateTo = (screen) => {
     const clean = screen.replace('#', '').replace(/^\/+/, '');
-    setCurrentScreen(clean || 'threads');
+    setCurrentScreen(clean.split('?')[0] || 'threads');
     window.location.hash = `#${clean || 'threads'}`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const openCanvasAction = (action) => {
+    setCanvasAction(action);
+    if (!CANVAS_SCREENS.includes(currentScreen)) navigateTo('canvas');
+  };
+
   return (
-    <NavigationContext.Provider value={{ currentScreen, navigateTo, isOnline }}>
+    <NavigationContext.Provider value={{ currentScreen, navigateTo, isOnline, canvasAction, openCanvasAction, clearCanvasAction: setCanvasAction }}>
       {!isOnline && (
         <div className="bg-amber-500 text-slate-900 text-xs font-bold px-4 py-2 text-center sticky top-0 z-50 flex items-center justify-center gap-2 shadow-md">
           <span>⚠️ Offline Mode Active: You are currently disconnected. Changes will be saved locally and synchronized once connectivity resumes.</span>

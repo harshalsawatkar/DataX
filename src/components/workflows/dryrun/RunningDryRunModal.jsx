@@ -10,11 +10,17 @@ export default function RunningDryRunModal({
   onCancel,
   totalRows = 1420,
   tableName = 'OPUR_C01',
+  ready = true,
+  error,
   rulesCount = 5
 }) {
-  const [phase, setPhase] = useState(2); // 1 = Read, 2 = Rules (68%), 3 = Done
-  const [processedRows, setProcessedRows] = useState(966);
+  const [phase, setPhase] = useState(2); // 2 = Applying Rules, 3 = Synthesizing Telemetry (loading), 4 = All Done
   const [progressPercent, setProgressPercent] = useState(68);
+  const [telemetryPercent, setTelemetryPercent] = useState(0);
+  const [animationDone, setAnimationDone] = useState(false);
+
+  const cleanTotalRows = Number(String(totalRows).replaceAll(',', '')) || 50;
+  const processedRows = Math.round(cleanTotalRows * (progressPercent / 100));
 
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
@@ -43,39 +49,61 @@ export default function RunningDryRunModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || error) return;
 
-    // Simulate real smooth progress through the 3 phases
+    setPhase(2);
+    setProgressPercent(68);
+    setTelemetryPercent(0);
+    setAnimationDone(false);
+
+    // Step 2: Animate business rule evaluation to 100%
     const t1 = setTimeout(() => {
-      setPhase(2);
-      setProgressPercent(68);
-      setProcessedRows(Math.round(totalRows * 0.68));
-    }, 400);
+      setProgressPercent(88);
+    }, 450);
 
+    // Step 2 Done -> Step 3 starts loading animation
     const t2 = setTimeout(() => {
-      setPhase(3);
       setProgressPercent(100);
-      setProcessedRows(totalRows);
-    }, 2200);
+      setPhase(3);
+      setTelemetryPercent(38);
+    }, 1000);
 
     const t3 = setTimeout(() => {
-      if (onCompleteRef.current) {
-        onCompleteRef.current();
-      }
-    }, 3000);
+      setTelemetryPercent(84);
+    }, 1550);
+
+    // Step 3 Done -> All 3 components show green checkmarks
+    const t4 = setTimeout(() => {
+      setTelemetryPercent(100);
+      setPhase(4);
+    }, 2100);
+
+    const t5 = setTimeout(() => {
+      setAnimationDone(true);
+    }, 2650);
 
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
+      clearTimeout(t4);
+      clearTimeout(t5);
     };
-  }, [isOpen, totalRows]);
+  }, [isOpen, error]);
+
+  useEffect(() => {
+    if (animationDone && ready && !error) {
+      if (onCompleteRef.current) {
+        onCompleteRef.current();
+      }
+    }
+  }, [animationDone, ready, error]);
 
   if (!isOpen) return null;
 
   const modalNode = (
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs font-sans"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/45 font-sans"
       role="dialog"
       aria-modal="true"
       onClick={onCancel || onClose}
@@ -86,16 +114,13 @@ export default function RunningDryRunModal({
         exit={{ opacity: 0, scale: 0.96, y: 10 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-[24px] max-w-[560px] w-full p-7 sm:p-8 shadow-2xl relative text-left overflow-hidden"
+        className="bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-[24px] max-w-[640px] max-h-[94vh] overflow-y-auto w-full p-6 shadow-2xl relative text-left"
       >
         {/* Top Header Row with Play Icon & Close */}
-        <div className="flex items-start justify-between gap-4 mb-2">
+        <div className="flex items-start justify-between gap-4 mb-5 border-b pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full border border-slate-200 dark:border-white/[0.1] bg-slate-50 dark:bg-white/[0.04] flex items-center justify-center text-slate-800 dark:text-white shrink-0">
-              <Play className="w-4 h-4 fill-current text-slate-800 dark:text-white ml-0.5" />
-            </div>
-            <h2 className="text-xl font-bold text-[#0A0F1F] dark:text-white tracking-tight">
-              Running a dry run...
+            <h2 className="text-2xl font-semibold text-[#0A0F1F] dark:text-white tracking-tight">
+              {error ? 'Dry run blocked' : 'Running a dry run...'}
             </h2>
           </div>
 
@@ -109,6 +134,7 @@ export default function RunningDryRunModal({
           </button>
         </div>
 
+        {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : <>
         {/* Subtitle */}
         <p className="text-xs sm:text-sm text-[#5F6678] dark:text-slate-400 mb-6">
           Checking {totalRows.toLocaleString()} rows from {tableName} with {rulesCount} rules. Nothing is written.
@@ -132,15 +158,21 @@ export default function RunningDryRunModal({
           </div>
 
           {/* Step 2: Applying Rules with Progress Bar */}
-          <div className="bg-white dark:bg-[#18181C] border border-blue-200 dark:border-blue-900/50 rounded-2xl p-4 space-y-2.5 shadow-2xs">
+          <div className="bg-slate-50 dark:bg-[#18181C] border border-slate-200 dark:border-blue-900/50 rounded-2xl p-4 space-y-2.5 shadow-2xs">
             <div className="flex items-center gap-3.5">
-              <div className="w-6 h-6 rounded-full border-2 border-[#2D55F5] border-t-transparent animate-spin shrink-0" />
+              {phase >= 3 ? (
+                <div className="w-6 h-6 rounded-full bg-emerald-100 text-[#127A52] flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </div>
+              ) : (
+                <div className="w-6 h-6 rounded-full border-2 border-[#2D55F5] border-t-transparent animate-spin shrink-0" />
+              )}
               <div>
                 <div className="text-xs sm:text-sm font-bold text-[#0A0F1F] dark:text-white">
                   Applying {rulesCount} business validation rules
                 </div>
                 <div className="text-[11px] text-[#5F6678] dark:text-slate-400 mt-0.5">
-                  {processedRows.toLocaleString()} of {totalRows.toLocaleString()} rows · {progressPercent}%
+                  {processedRows.toLocaleString()} of {cleanTotalRows.toLocaleString()} rows · {progressPercent}%
                 </div>
               </div>
             </div>
@@ -148,28 +180,52 @@ export default function RunningDryRunModal({
             {/* Progress Bar */}
             <div className="w-full h-1.5 bg-[#F1F3F9] dark:bg-white/[0.08] rounded-full overflow-hidden">
               <div 
-                className="h-full bg-[#2D55F5] rounded-full transition-all duration-300"
+                className={`h-full rounded-full transition-all duration-300 ${phase >= 3 ? 'bg-[#127A52]' : 'bg-[#2D55F5]'}`}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
 
           {/* Step 3: Telemetry & auto-fix diff */}
-          <div className="bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-4 flex items-center gap-3.5">
-            <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-white/[0.05] text-[#8E95A9] flex items-center justify-center shrink-0">
-              <Clock className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <div className="text-xs sm:text-sm font-semibold text-[#5F6678] dark:text-slate-300">
-                Synthesizing compliance telemetry & auto-fix diff
+          <div className={`${phase >= 3 ? 'bg-slate-50 dark:bg-[#18181C] border-slate-200 dark:border-blue-900/50 shadow-2xs' : 'bg-white dark:bg-[#18181C] border-[#E3E6EE] dark:border-white/[0.08]'} border rounded-2xl p-4 space-y-2.5 transition-all duration-200`}>
+            <div className="flex items-center gap-3.5">
+              {phase >= 4 ? (
+                <div className="w-6 h-6 rounded-full bg-emerald-100 text-[#127A52] flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </div>
+              ) : phase === 3 ? (
+                <div className="w-6 h-6 rounded-full border-2 border-[#2D55F5] border-t-transparent animate-spin shrink-0" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-white/[0.05] text-[#8E95A9] flex items-center justify-center shrink-0">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+              )}
+              <div>
+                <div className={`text-xs sm:text-sm ${phase >= 3 ? 'font-bold text-[#0A0F1F] dark:text-white' : 'font-semibold text-[#5F6678] dark:text-slate-300'}`}>
+                  Synthesizing compliance telemetry & auto-fix diff
+                </div>
+                <div className="text-[11px] text-[#5F6678] dark:text-slate-400 mt-0.5">
+                  {phase >= 4
+                    ? 'Completed · 100% verified'
+                    : phase === 3
+                      ? `Compiling rule outcomes & auto-fix diff · ${telemetryPercent}%`
+                      : 'Waiting'}
+                </div>
               </div>
-              <div className="text-[11px] text-[#8E95A9] dark:text-slate-500 mt-0.5">
-                {phase === 3 ? 'Completed' : 'Waiting'}
-              </div>
             </div>
+
+            {phase >= 3 && (
+              <div className="w-full h-1.5 bg-[#F1F3F9] dark:bg-white/[0.08] rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-300 ${phase >= 4 ? 'bg-[#127A52]' : 'bg-[#2D55F5]'}`}
+                  style={{ width: `${telemetryPercent}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
+        </>}
         {/* Footer Actions */}
         <div className="mt-7 pt-4 border-t border-[#F0F2F6] dark:border-white/[0.08] flex items-center justify-between">
           <span className="text-xs text-[#8E95A9] dark:text-slate-500">
@@ -179,8 +235,9 @@ export default function RunningDryRunModal({
           <div className="flex items-center gap-3">
             <button
               type="button"
+              disabled={!ready || Boolean(error)}
               onClick={onComplete}
-              className="text-xs sm:text-sm font-semibold text-[#0A0F1F] dark:text-white hover:text-[#2D55F5] transition-colors cursor-pointer"
+              className="disabled:opacity-40 text-xs sm:text-sm font-semibold text-[#0A0F1F] dark:text-white hover:text-[#2D55F5] transition-colors cursor-pointer"
             >
               Skip to results →
             </button>

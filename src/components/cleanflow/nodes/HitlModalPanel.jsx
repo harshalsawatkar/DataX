@@ -135,7 +135,6 @@ export default function HitlModalPanel({
     return suggestions;
   }, [effectiveColumns]);
 
-  const selectedTrigger = tableSpecificTriggers.find(t => t.value === triggerPolicy) || tableSpecificTriggers[0];
 
   const handleTestAlert = () => {
     setTesting(true);
@@ -152,29 +151,16 @@ export default function HitlModalPanel({
 
   return (
     <div className="space-y-4">
-      {/* Header Banner */}
-      <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl flex items-start gap-3">
-        <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0">
-          <UserCheck className="w-4 h-4" />
-        </div>
-        <div>
-          <h4 className="text-xs font-bold text-amber-950">Human-in-the-Loop (HITL) Governance Gate</h4>
-          <p className="text-[11px] text-amber-700 mt-0.5">
-            Pauses the data stream whenever a validation threshold or anomaly condition is met, notifying designated reviewers for formal approval before downstream commits.
-          </p>
-        </div>
-      </div>
-
       {/* Mode Switcher: System Suggested vs Custom Condition Builder */}
       <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">Condition Trigger Strategy</label>
+        <label className="block text-xs font-bold text-slate-700 mb-1">Trigger strategy</label>
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => onConditionTypeChange?.('preset')}
             className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex items-center gap-2 ${
               conditionType === 'preset'
-                ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold shadow-xs'
+                ? 'bg-blue-50 border-blue-400 text-blue-900 font-bold shadow-xs'
                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
             }`}
           >
@@ -195,13 +181,13 @@ export default function HitlModalPanel({
             }}
             className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex items-center gap-2 ${
               conditionType === 'custom'
-                ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold shadow-xs'
+                ? 'bg-blue-50 border-blue-400 text-blue-900 font-bold shadow-xs'
                 : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
             }`}
           >
             <Sliders className="w-3.5 h-3.5 text-amber-600 shrink-0" />
             <div>
-              <span className="block text-xs">Custom Condition Builder</span>
+              <span className="block text-xs">Custom condition</span>
               <span className="block text-[10px] text-slate-400 font-normal">Define bespoke predicate</span>
             </div>
           </button>
@@ -217,22 +203,12 @@ export default function HitlModalPanel({
               Valid for {sourceTable}
             </span>
           </div>
-          <select
-            value={triggerPolicy}
-            onChange={(e) => onTriggerPolicyChange?.(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 cursor-pointer"
-          >
-            {tableSpecificTriggers.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          {selectedTrigger && (
-            <div className="mt-1.5 p-2 bg-amber-50/80 rounded-lg border border-amber-200 text-[11px] text-amber-900 flex items-center gap-2">
-              <span className="font-semibold shrink-0">Monitored: {selectedTrigger.column}</span>
-              <span className="text-slate-400">·</span>
-              <span className="text-amber-700">{selectedTrigger.hint}</span>
-            </div>
-          )}
+          <div className="grid gap-2">
+            {tableSpecificTriggers.map(option => <label key={option.value} className={`flex items-center gap-3 rounded-lg border p-3 text-xs cursor-pointer ${triggerPolicy === option.value ? 'border-blue-300 bg-blue-50' : 'border-slate-200'}`}>
+              <input type="radio" name="review-trigger" checked={triggerPolicy === option.value} onChange={() => onTriggerPolicyChange?.(option.value)} />
+              {option.label}
+            </label>)}
+          </div>
         </div>
       ) : (
         /* Strategy 2: Custom Condition Builder */

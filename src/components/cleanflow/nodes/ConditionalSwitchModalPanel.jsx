@@ -232,63 +232,7 @@ export default function ConditionalSwitchModalPanel({
 
   return (
     <div className="space-y-4">
-      {/* Header with Source Detection Context */}
-      <div className="p-3.5 bg-violet-50/70 border border-violet-200 rounded-xl flex items-start justify-between gap-3 flex-wrap">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-lg bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
-            <GitBranch className="w-4 h-4" />
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-violet-950 flex items-center gap-2">
-              <span>Conditional Router (If / Else)</span>
-              <span className="text-[10px] font-semibold text-violet-700 bg-white px-2 py-0.5 rounded-full border border-violet-200">
-                2-Way Flow Split
-              </span>
-            </h4>
-            <p className="text-[11px] text-violet-700 mt-0.5">
-              Splits stream records into two dedicated paths based on your business predicate. Records meeting the condition route to <strong>TRUE</strong>; others take the <strong>FALSE / Default</strong> path.
-            </p>
-          </div>
-        </div>
-
-        {/* Source Table & Column Detection Badge */}
-        <div className="flex items-center gap-1.5 self-center">
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md bg-white border border-violet-200 text-slate-700 shadow-2xs">
-            <Database className="w-3 h-3 text-violet-600" />
-            <span className="text-slate-500">Source:</span>
-            <span className="font-mono font-bold text-violet-900">{sourceTable || 'source_table'}</span>
-          </span>
-          <span className="text-[10px] font-semibold px-2 py-1 rounded-md bg-violet-100 text-violet-800 border border-violet-200">
-            {effectiveColumns.length} Columns Detected
-          </span>
-        </div>
-      </div>
-
-      {/* Visual routing diagram */}
-      <div className="flex items-center justify-center gap-2 py-1">
-        <div className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs font-mono text-slate-700 text-center">
-          Input Record ({sourceTable || 'stream'})
-        </div>
-        <ArrowRight className="w-4 h-4 text-slate-400" />
-        <div className="px-3 py-1.5 rounded-lg bg-violet-100 border border-violet-300 text-xs font-bold text-violet-900 text-center font-mono">
-          IF {activeField} {conditionOp} {isEmptinessOp ? '' : conditionVal}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <ArrowRight className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="px-2 py-1 rounded-md bg-emerald-100 border border-emerald-300 text-[10px] font-bold text-emerald-800 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> TRUE Path ({trueDest || 'TRUE'})
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-            <span className="px-2 py-1 rounded-md bg-slate-100 border border-slate-300 text-[10px] font-bold text-slate-600 flex items-center gap-1">
-              <XCircle className="w-3 h-3" /> FALSE Path ({falseDest || 'Default'})
-            </span>
-          </div>
-        </div>
-      </div>
-
+      <p className="rounded-xl bg-indigo-50 p-4 text-xs text-slate-700">Records that meet the condition go to TRUE. Everything else takes the FALSE (default) path.</p>
       {/* Smart Column-Aware Quick Presets */}
       {smartPresets.length > 0 && (
         <div className="space-y-1.5">

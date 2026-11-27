@@ -27,19 +27,16 @@ export default function AddNodeCatalogModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-[#18181C] rounded-[24px] border border-[#E2E8F0] dark:border-white/[0.1] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[88vh] cursor-default font-sans animate-in zoom-in-95 duration-150"
+        role="dialog" aria-modal="true" aria-labelledby="add-node-title" onKeyDown={event => { if (event.key === 'Escape') onClose(); }}
+        className="bg-white dark:bg-[#18181C] rounded-[20px] border border-[#E2E8F0] dark:border-white/[0.1] shadow-2xl w-full max-w-[760px] overflow-hidden flex flex-col max-h-[94dvh] cursor-default font-sans animate-in zoom-in-95 duration-150"
       >
         {/* Modal Header */}
-        <div className="p-6 pb-4 flex items-start justify-between">
+        <div className="px-6 py-4 border-b border-slate-200 mb-4 flex items-start justify-between">
           <div>
-            <span className="text-xs text-[#5F6678] dark:text-slate-400 block leading-tight">
-              Sources, intelligence, routing and targets
-            </span>
-            <h3 className="text-xl font-bold text-[#0A0F1F] dark:text-white mt-1">
-              Add a node
-            </h3>
+            <h3 id="add-node-title" className="text-xl font-semibold">Add a node</h3>
+            <p className="text-xs text-slate-500 mt-1">Sources, intelligence, routing and targets</p>
           </div>
-          <button
+          <button aria-label="Close"
             onClick={onClose}
             className="w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] flex items-center justify-center transition-colors cursor-pointer"
           >
@@ -56,7 +53,7 @@ export default function AddNodeCatalogModal({
               placeholder="Search nodes, e.g. SAP, Postgres, router..."
               value={addNodeSearch}
               onChange={(e) => setAddNodeSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-white/[0.04] border border-[#CDD2DE] dark:border-white/[0.12] rounded-2xl text-xs text-[#0A0F1F] dark:text-white placeholder:text-[#8C93A3] focus:outline-none focus:ring-2 focus:ring-[#2D55F5]/30 font-sans"
+              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-white/[0.04] border border-[#CDD2DE] dark:border-white/[0.12] rounded-lg text-xs text-[#0A0F1F] dark:text-white placeholder:text-[#8C93A3] focus:outline-none focus:ring-2 focus:ring-[#2D55F5]/30 font-sans"
               autoFocus
             />
           </div>
@@ -64,11 +61,11 @@ export default function AddNodeCatalogModal({
 
         {/* AI Helper Banner */}
         <div className="px-6 pb-4">
-          <div className="p-3.5 px-4 rounded-2xl bg-[#F0F5FF] dark:bg-[#2D55F5]/10 border border-[#D0E0FF] dark:border-[#2D55F5]/30 flex items-center justify-between gap-3">
+          <div className="p-3.5 px-4 rounded-lg bg-[#EEF1FF] dark:bg-[#2D55F5]/10 border border-[#D0E0FF] dark:border-[#2D55F5]/30 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
               <Sparkles className="w-4 h-4 text-[#2D55F5] shrink-0" />
               <div className="min-w-0 text-xs">
-                <span className="font-semibold text-[#0A0F1F] dark:text-white mr-1.5">
+                <span className="block font-semibold text-[#0A0F1F] dark:text-white">
                   Not sure which node fits?
                 </span>
                 <span className="text-[#5F6678] dark:text-slate-300">
@@ -90,7 +87,8 @@ export default function AddNodeCatalogModal({
         </div>
 
         {/* Catalog Grid */}
-        <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6">
+        <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-4">
+          {!OPERATIONAL_CATALOG.some(category => category.items.some(item => [item.name, item.desc].some(text => text.toLowerCase().includes(addNodeSearch.toLowerCase())))) && <p role="status" className="py-4 text-sm text-slate-500">No matching nodes</p>}
           {OPERATIONAL_CATALOG.map((cat) => {
             const filtered = cat.items.filter(
               (item) =>
@@ -101,31 +99,31 @@ export default function AddNodeCatalogModal({
             if (filtered.length === 0) return null;
 
             return (
-              <div key={cat.category} className="space-y-3">
+              <div key={cat.category} className="space-y-2">
                 <h4 className="text-[11px] font-bold tracking-wider text-[#5F6678] dark:text-slate-400">
                   {getCategoryTitle(cat.category)}
                 </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {filtered.map((item, idx) => {
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {filtered.map((item) => {
                     const Icon = item.icon;
                     return (
-                      <div
-                        key={idx}
+                      <button type="button" title={item.desc}
+                        key={item.name}
                         onClick={() => handleAddNodeFromCatalog(item)}
-                        className="p-3.5 rounded-2xl border border-[#E2E8F0] dark:border-white/[0.1] hover:border-[#2D55F5] hover:bg-[#F0F5FF]/30 dark:hover:bg-[#2D55F5]/10 bg-white dark:bg-[#18181C] transition-all cursor-pointer flex items-start gap-3 group shadow-2xs hover:shadow-xs"
+                        className="text-left px-3 py-2 rounded-lg border border-[#E2E8F0] dark:border-white/[0.1] hover:border-[#2D55F5] hover:bg-[#F0F5FF]/30 dark:hover:bg-[#2D55F5]/10 bg-white dark:bg-[#18181C] transition-all cursor-pointer flex items-center gap-2.5 group hover:shadow-xs"
                       >
-                        <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] dark:bg-white/[0.05] border border-[#EEF2F6] dark:border-white/[0.08] flex items-center justify-center shrink-0 text-[#2D55F5]">
+                        <div className="w-4 h-4 flex items-center justify-center shrink-0 text-[#2D55F5]">
                           <Icon className="w-4 h-4" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <span className="text-xs font-semibold text-[#0A0F1F] dark:text-white group-hover:text-[#2D55F5] truncate block">
+                          <span className="text-xs font-semibold text-[#0A0F1F] dark:text-white group-hover:text-[#2D55F5] block">
                             {item.name}
                           </span>
-                          <p className="text-[11px] text-[#5F6678] dark:text-slate-400 line-clamp-1 mt-0.5">
+                          <p className="text-[11px] text-[#5F6678] dark:text-slate-400 mt-0.5 leading-tight">
                             {item.desc}
                           </p>
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

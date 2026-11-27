@@ -1,0 +1,13 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Logo/Mark" clip-path="url(#clip0_0_62)">
+<path id="Vector" d="M23.2 0H8.8C3.93989 0 0 3.93989 0 8.8V23.2C0 28.0601 3.93989 32 8.8 32H23.2C28.0601 32 32 28.0601 32 23.2V8.8C32 3.93989 28.0601 0 23.2 0Z" fill="#2D55F5"/>
+<path id="Vector_2" d="M7.2 24.8L20 7.2H25.2L12.4 24.8H7.2Z" fill="white"/>
+<path id="Vector_3" d="M6.8 7.2H12L15.52 12H10.32L6.8 7.2Z" fill="#D4FF3A"/>
+<path id="Vector_4" d="M16.88 20H22.08L25.6 24.8H20.4L16.88 20Z" fill="#D4FF3A"/>
+</g>
+<defs>
+<clipPath id="clip0_0_62">
+<rect width="32" height="32" fill="white"/>
+</clipPath>
+</defs>
+</svg>

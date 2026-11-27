@@ -1,153 +1,49 @@
 import React from 'react';
-import markLogo from '../../assets/mark.jpg';
+import markLogo from '../../assets/landing-logo-mark.svg';
 
-/**
- * Footer – Exact Figma "DataX Landing" Footer Spec
- * From Figma Inspector:
- *   - Layout: Horizontal, 1440px Fill × 113px Hug
- *   - Background: color/surface #FFFFFF
- *   - Border: 1px top side, color/border #E3E6EE
- *   - Padding: T40 R120 B40 L120
- *   - Gap: 32px between elements
- *   - Logo: Logo/Lockup light → "DataX" Geist 700 Bold 22px 100% lh -3% tracking, color #0A0F1F
- *   - "by DataGlow.ai": DX/small Geist 400 Regular 13px 150% lh, color/text3 #5F6678
- *   - Nav links: DX/small Geist 400 Regular 13px 150% lh, color/text2 #474F61 (hover → #2D55F5)
- *   - Copyright "© 2026 DataGlow.ai Inc.": DX/small Geist 400 13px 150% lh, color/text3 #5F6678
- */
 const NAV_LINKS = [
   { label: 'How it works', href: '#how-it-works' },
-  { label: 'Use cases',    href: '#use-cases' },
-  { label: 'Security',     href: '#for-leaders' },
-  { label: 'Privacy',      href: '#' },
-  { label: 'Contact',      href: '#' },
+  { label: 'Use cases', href: '#use-cases' },
+  { label: 'Security', href: '#for-leaders' },
+  { label: 'Privacy', href: '#' },
+  { label: 'Contact', href: '#' },
 ];
 
-const LINK_STYLE = {
-  fontFamily: "'Geist', sans-serif",
-  fontSize: 13,
-  fontWeight: 400,
-  lineHeight: '150%',
-  letterSpacing: '0%',
-  color: '#474F61',
-  textDecoration: 'none',
-  whiteSpace: 'nowrap',
-  transition: 'color 0.15s',
-};
-
-export default function Footer({ setActiveView, onOpenDemo }) {
+export default function Footer({ setActiveView }) {
   return (
-    <footer
-      style={{
-        background: '#FFFFFF',
-        borderTop: '1px solid #E3E6EE',
-        fontFamily: "'Geist', sans-serif",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 1200,
-          margin: '0 auto',
-          padding: '0 24px',
-          height: 73,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 32,
-          flexWrap: 'wrap',
-        }}
-      >
-        {/* ── Logo Lockup: mark + "DataX · by DataGlow.ai" ── */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-          onClick={() => { setActiveView('website'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-        >
-          <img
-            src={markLogo}
-            alt="DataX"
-            style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain', display: 'block' }}
-          />
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            {/* "DataX" — Logo/Lockup light: Geist 700 Bold 22px 100% lh -3% tracking */}
-            <span
-              style={{
-                fontFamily: "'Geist', sans-serif",
-                fontSize: 22,
-                fontWeight: 700,
-                lineHeight: '100%',
-                letterSpacing: '-0.03em',
-                color: '#0A0F1F',
-              }}
-            >
-              DataX
-            </span>
-            {/* "by DataGlow.ai" — DX/small: Geist 400 Regular 13px 150% lh, color/text3 #5F6678 */}
-            <span
-              style={{
-                fontFamily: "'Geist', sans-serif",
-                fontSize: 13,
-                fontWeight: 400,
-                lineHeight: '150%',
-                letterSpacing: '0%',
-                color: '#5F6678',
-              }}
-            >
-              by DataGlow.ai
-            </span>
-          </div>
+    <footer className="border-t border-[#E3E6EE] bg-white font-['Geist',sans-serif] text-[13px] leading-[1.5] tracking-normal text-[#5F6678]">
+      <div className="mx-auto flex max-w-[1248px] flex-wrap items-center gap-x-8 gap-y-5 px-6 py-10">
+        <div className="flex items-center gap-8">
+          <button
+            type="button"
+            className="flex items-center gap-[10px] whitespace-nowrap text-[22px] font-bold leading-none tracking-[-0.03em] text-[#0A0F1F]"
+            onClick={() => setActiveView('website')}
+          >
+            <img src={markLogo} alt="" width="32" height="32" />
+            <span>Data<span className="text-[#2D55F5]">X</span></span>
+          </button>
+          <span>by DataGlow.ai</span>
         </div>
 
-        {/* ── Center Nav Links ── */}
-        <nav
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 32,
-            flex: 1,
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-          }}
-        >
-          {NAV_LINKS.map((link) => (
+        <nav aria-label="Footer navigation" className="flex flex-wrap items-center gap-x-8 gap-y-3 lg:ml-auto">
+          {NAV_LINKS.map(({ label, href }) => (
             <a
-              key={link.label}
-              href={link.href}
-              style={LINK_STYLE}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#2D55F5')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#474F61')}
-              onClick={(e) => {
-                if (link.href.startsWith('#') && link.href.length > 1) {
-                  e.preventDefault();
-                  const el = document.getElementById(link.href.slice(1));
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+              key={label}
+              href={href}
+              className="whitespace-nowrap text-[#474E61] transition-colors hover:text-[#2D55F5]"
+              onClick={(event) => {
+                if (href.length > 1) {
+                  event.preventDefault();
+                  document.getElementById(href.slice(1))?.scrollIntoView({ behavior: 'smooth' });
                 }
               }}
             >
-              {link.label}
+              {label}
             </a>
           ))}
         </nav>
 
-        {/* ── Copyright — DX/small: Geist 400 13px 150% lh, color/text3 #5F6678 ── */}
-        <span
-          style={{
-            fontFamily: "'Geist', sans-serif",
-            fontSize: 13,
-            fontWeight: 400,
-            lineHeight: '150%',
-            letterSpacing: '0%',
-            color: '#5F6678',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          © {new Date().getFullYear()} DataGlow.ai Inc.
-        </span>
+        <span className="whitespace-nowrap">© {new Date().getFullYear()} DataGlow.ai Inc.</span>
       </div>
     </footer>
   );

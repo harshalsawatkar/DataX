@@ -1,0 +1,36 @@
+.row-conveyor {
+  position: relative;
+  flex: none;
+  width: min(100vw, 1680px);
+  height: clamp(270px, 30.55vw, 480px);
+  margin: clamp(24px, 4vw, 60px) 0 0;
+  background: radial-gradient(ellipse at 50% 97%, #19337730, transparent 33%);
+}
+.row-conveyor canvas { display: block; width: 100%; height: 100%; }
+.row-conveyor figcaption span {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid #ffffff14;
+  border-radius: 999px;
+  background: #171e31de;
+  color: #e3e8f4;
+  font: 400 clamp(10px, .85vw, 12px)/1.4 Geist, sans-serif;
+  white-space: nowrap;
+}
+.row-conveyor figcaption span::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+.row-conveyor .rows-in { --dot: #a6adc2; top: 39%; left: 11%; }
+.row-conveyor .rows-clean { --dot: #d4ff3a; top: 39%; right: 13%; }
+.row-conveyor .rows-held { --dot: #ed4f3d; top: 70%; left: calc(50% + 6%); }
+@media (max-width: 600px) {
+  .row-conveyor .rows-in { left: 3%; }
+  .row-conveyor .rows-clean { right: 3%; }
+  .row-conveyor .rows-held { top: 90%; left: 50%; transform: translateX(-50%); }
+}

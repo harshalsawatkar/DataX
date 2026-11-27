@@ -1,3 +1,4 @@
+import { CANVAS_NODE_WIDTH, canvasEdgeGeometry, canvasBranch } from './canvasGeometry';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus,
@@ -73,7 +74,7 @@ import CanvasTelemetryDrawer from './CanvasTelemetryDrawer';
 import { OPERATIONAL_CATALOG, sanitizeNode, resolveEngineKey } from './constants/nodeCatalog';
 import { RunningDryRunModal, DryRunResultsModal } from '../workflows/dryrun';
 import { addNotification } from '../../services/notificationService';
-import { useNavigation } from '../../context/NavigationContext';
+import { useNavigation, CANVAS_SCREENS } from '../../context/NavigationContext';
 import { useRuleEngine } from '../../context/RuleEngineContext';
 import { useToast } from '../../context/ToastContext';
 import { getTableCatalog, getTableData } from '../../data/sampleDatasets';
@@ -92,8 +93,18 @@ import dryrunIcon from '../../assets/icons/dryrun.png';
 import spinnerIcon from '../../assets/icons/spinner.png';
 import uploadIcon from '../../assets/icons/upload.png';
 
+const inspectorFrames = {
+  source: ['Source ingestion', 'Source database and table', 'source'],
+  rules: ['Intelligence engine', 'Rules and prompt', 'rules'],
+  conditional: ['If / else router', 'Directs records to a TRUE or FALSE path', 'router'],
+  hitl: ['Human review gate', 'Pauses the pipeline for an approval decision', 'gate'],
+  router: ['CleanFlow router', 'Splits each row into three streams', 'router'],
+  target: ['Target system', 'Where compliant records are committed', 'target'],
+  quarantine: ['Quarantine store', 'Dead-letter isolation', 'quarantine'],
+};
+
 export default function WorkflowCanvasBuilder({ onMoveToNext }) {
-  const { navigateTo } = useNavigation();
+  const { navigateTo, currentScreen, canvasAction, clearCanvasAction } = useNavigation();
   const { showToast } = useToast();
   const {
     sourceConfig,
@@ -110,7 +121,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     executeDryRun,
     executeLiveRun,
     pipelineStatus,
-    dryRunResult,
+    dryRunResult: lastDryRun,
     s4hanaDocNumber,
     workflowNodes,
     setWorkflowNodes,
@@ -122,9 +133,10 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     isSavingWorkflow,
     lastSavedWorkflowTime
   } = useRuleEngine();
+  const dryRunResult = lastDryRun?.threadId === activeThread?.id ? lastDryRun : null;
 
   // Determine initial template key
-  const isScratchInitial = activeThread?.id === 'scratch' || activeThread?.packKey === 'scratch' || activeThread?.name?.toLowerCase().includes('scratch');
+  const isScratchInitial = activeThread?.id === 'scratch' || activeThread?.packKey === 'scratch';
   const defaultTemplateKey = activeThread?.packKey || activeThread?.domainPackId || (activeThread?.name?.includes('Customer') ? 'customer_master_reconciliation' : activeThread?.name?.includes('Ledger') ? 'financial_gl_ledger' : activeThread?.name?.includes('HIPAA') ? 'healthcare_hipaa' : 'sap_bw_s4hana');
 
   // Viewport State: Pan & Zoom
@@ -134,55 +146,50 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   const panStartRef = useRef({ x: 0, y: 0 });
   const canvasRef = useRef(null);
 
-  // Workflow Graph State: Nodes & Edges (backed by persistent memory & localStorage session)
-  const tmpl = getWorkflowTemplate(activeThread || defaultTemplateKey);
-  const initialSetup = isScratchInitial ? { nodes: [], edges: [] } : tmpl;
-  const [nodes, setNodesState] = useState(() => {
-    const rawNodes = (Array.isArray(workflowNodes) && workflowNodes.length >= 2)
-      ? workflowNodes
-      : initialSetup.nodes;
-    const sanitized = (rawNodes || []).map(sanitizeNode);
-    // Deduplicate identical type + title nodes that were duplicated in local storage
-    const seen = new Set();
-    const deduped = [];
-    for (const n of sanitized) {
-      const key = `${n.type}__${n.title}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        deduped.push(n);
-      }
-    }
-    return deduped;
-  });
-  const [edges, setEdgesState] = useState(() => {
-    if (Array.isArray(workflowEdges) && workflowEdges.length >= 1) {
-      return workflowEdges;
-    }
-    return initialSetup.edges;
-  });
-  // Track latest nodes in a ref for fast drag performance & mouse release persistence
-  const nodesRef = useRef(nodes);
+  const [nodes, setNodesState] = useState(() => (workflowNodes ?? []).map(sanitizeNode));
+  const [edges, setEdgesState] = useState(() => workflowEdges ?? []);
+  const [aiPreview, setAiPreview] = useState(null);
+  const previewOffset = nodes.length ? Math.max(...nodes.map(node => node.x)) + CANVAS_NODE_WIDTH : 0;
+  const visibleNodes = aiPreview?.nodes.length
+    ? [...nodes, ...aiPreview.nodes.map(node => ({ ...node, id: `preview-${node.id}`, x: node.x + previewOffset, isSuggested: true, isRejected: node.status === 'rejected' }))]
+    : nodes;
+  const visibleEdges = aiPreview?.edges.length
+    ? [...edges, ...aiPreview.edges.map(edge => ({ ...edge, id: `preview-${edge.id}`, from: `preview-${edge.from}`, to: `preview-${edge.to}`, isSuggested: true }))]
+    : edges;
+  const visibleNodesRef = useRef(visibleNodes);
+  visibleNodesRef.current = visibleNodes;
+  const [nodeHeights, setNodeHeights] = useState({});
+  const nodeIds = visibleNodes.map(node => node.id).join('|');
   useEffect(() => {
-    nodesRef.current = nodes;
-  }, [nodes]);
+    const cards = canvasRef.current?.querySelectorAll('[data-canvas-node]') ?? [];
+    const measure = () => {
+      const heights = Object.fromEntries(Array.from(cards, card => [card.dataset.canvasNode, card.offsetHeight]));
+      setNodeHeights(previous =>
+        Object.keys(heights).length === Object.keys(previous).length &&
+        Object.entries(heights).every(([id, height]) => previous[id] === height) ? previous : heights
+      );
+    };
+    const observer = new ResizeObserver(measure);
+    cards.forEach(card => observer.observe(card));
+    measure();
+    return () => observer.disconnect();
+  }, [nodeIds]);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
   const [isDirty, setIsDirty] = useState(false);
-  // Synchronized state setters that immediately update context & localStorage session
-  const setNodes = useCallback((updater) => {
+  const setNodes = useCallback(updater => {
+    const next = typeof updater === 'function' ? updater(nodesRef.current) : updater;
+    nodesRef.current = next;
+    setNodesState(next);
+    setWorkflowNodes(next);
     setIsDirty(true);
-    setNodesState(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      nodesRef.current = next;
-      setWorkflowNodes(next);
-      return next;
-    });
   }, [setWorkflowNodes]);
-  const setEdges = useCallback((updater) => {
+  const setEdges = useCallback(updater => {
+    const next = typeof updater === 'function' ? updater(edgesRef.current) : updater;
+    edgesRef.current = next;
+    setEdgesState(next);
+    setWorkflowEdges(next);
     setIsDirty(true);
-    setEdgesState(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      setWorkflowEdges(next);
-      return next;
-    });
   }, [setWorkflowEdges]);
   // Window beforeunload prompt when unsaved changes exist
   useEffect(() => {
@@ -196,45 +203,75 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
-  // Synchronize when switching workflows from catalog or domain pack
-  const lastActiveThreadIdRef = useRef(activeThread?.id);
-  useEffect(() => {
-    if (activeThread?.id && activeThread.id !== lastActiveThreadIdRef.current) {
-      lastActiveThreadIdRef.current = activeThread.id;
-      const matchingTmpl = getWorkflowTemplate(activeThread);
-      const rawThreadNodes = (Array.isArray(activeThread.nodes) && activeThread.nodes.length >= 2)
-        ? activeThread.nodes
-        : matchingTmpl.nodes;
-      const sanitizedThreadNodes = (rawThreadNodes || []).map(sanitizeNode);
-      const seenThread = new Set();
-      const resolvedNodes = [];
-      for (const n of sanitizedThreadNodes) {
-        const key = `${n.type}__${n.title}`;
-        if (!seenThread.has(key)) {
-          seenThread.add(key);
-          resolvedNodes.push(n);
-        }
-      }
-      const resolvedEdges = (Array.isArray(activeThread.edges) && activeThread.edges.length >= 1)
-        ? activeThread.edges
-        : matchingTmpl.edges;
-      setNodesState(resolvedNodes);
-      setWorkflowNodes(resolvedNodes);
-      setEdgesState(resolvedEdges);
-      setWorkflowEdges(resolvedEdges);
-      setIsDirty(false);
-    }
-  }, [activeThread, setWorkflowNodes, setWorkflowEdges]);
   // Execution & Live Status State
   const [isExecutingDryRun, setIsExecutingDryRun] = useState(false);
   const [isRunningDryRunModalOpen, setIsRunningDryRunModalOpen] = useState(false);
   const [isDryRunResultsModalOpen, setIsDryRunResultsModalOpen] = useState(false);
   const [isExecutingLiveRun, setIsExecutingLiveRun] = useState(false);
-  const [executionSummary, setExecutionSummary] = useState(null);
-  const [isTelemetryDrawerOpen, setIsTelemetryDrawerOpen] = useState(false);
+  const [executionSummary, setExecutionSummary] = useState(() => {
+    if (dryRunResult?.totalChecked > 0) {
+      return {
+        total: dryRunResult.totalChecked,
+        clean: dryRunResult.cleanCount ?? 0,
+        fixed: dryRunResult.autoFixedCount || 0,
+        quarantined: dryRunResult.quarantinedCount || 0,
+        health: dryRunResult.passRate ?? 0,
+        ruleOutcomes: dryRunResult.ruleOutcomes || [],
+        nodeExecutions: dryRunResult.nodeExecutions,
+        elapsedMs: dryRunResult.elapsedMs
+      };
+    }
+    return null;
+  });
+  const [isTelemetryDrawerOpen, setIsTelemetryDrawerOpen] = useState(() => Boolean(dryRunResult?.totalChecked > 0));
   const [telemetryDrawerHeight, setTelemetryDrawerHeight] = useState(285);
   const [executionError, setExecutionError] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Sync executionSummary when dryRunResult updates from RunningDryRunPage
+  useEffect(() => {
+    if (dryRunResult?.totalChecked > 0 && !executionSummary) {
+      setExecutionSummary({
+        total: dryRunResult.totalChecked,
+        clean: dryRunResult.cleanCount ?? 0,
+        fixed: dryRunResult.autoFixedCount || 0,
+        quarantined: dryRunResult.quarantinedCount || 0,
+        health: dryRunResult.passRate ?? 0,
+        ruleOutcomes: dryRunResult.ruleOutcomes || [],
+        nodeExecutions: dryRunResult.nodeExecutions,
+        elapsedMs: dryRunResult.elapsedMs
+      });
+      setIsTelemetryDrawerOpen(true);
+    }
+  }, [dryRunResult]);
+
+  // Synchronize when switching workflows from catalog, top bar, or Navigate & Filter modal
+  const lastActiveThreadIdRef = useRef(activeThread?.id);
+  useEffect(() => {
+    if (activeThread?.id && activeThread.id !== lastActiveThreadIdRef.current) {
+      lastActiveThreadIdRef.current = activeThread.id;
+      const matchingTmpl = getWorkflowTemplate(activeThread);
+      const scratch = activeThread.packKey === 'scratch' || activeThread.id === 'scratch';
+      const resolvedNodes = (activeThread.nodes ?? (scratch ? [] : matchingTmpl.nodes)).map(sanitizeNode);
+      const resolvedEdges = activeThread.edges ?? (scratch ? [] : matchingTmpl.edges);
+      setNodesState(resolvedNodes);
+      nodesRef.current = resolvedNodes;
+      setWorkflowNodes(resolvedNodes);
+      edgesRef.current = resolvedEdges;
+      setEdgesState(resolvedEdges);
+      setWorkflowEdges(resolvedEdges);
+      setSelectedNodeId(null);
+      setSelectedEdgeId(null);
+      setIsPropertyModalOpen(false);
+      setIsBuildWithAiOpen(false);
+      setIsAiModalOpen(false);
+      setAiPreview(null);
+      setExecutionSummary(null);
+      setDagNodeExecutions({});
+      setIsTelemetryDrawerOpen(false);
+      setIsDirty(false);
+    }
+  }, [activeThread, setWorkflowNodes, setWorkflowEdges]);
 
   // Quarantine Visual Canvas Trace State (Matching Main-5.png)
   const [traceRecordId, setTraceRecordId] = useState(() => {
@@ -272,6 +309,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   // Interactive Edge Drawing State (from port to port)
   const [drawingEdge, setDrawingEdge] = useState(null); // { fromNodeId, startX, startY, currentX, currentY }
   // Modals State
+  const [canvasActionPicker, setCanvasActionPicker] = useState(null);
   const [isAddNodeModalOpen, setIsAddNodeModalOpen] = useState(false);
   const [isTemplatesDropdownOpen, setIsTemplatesDropdownOpen] = useState(false);
   const [addNodeSearch, setAddNodeSearch] = useState('');
@@ -282,13 +320,14 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   const [isPreflightOpen, setIsPreflightOpen] = useState(false);
   const [isEdgeInsertMenuOpen, setIsEdgeInsertMenuOpen] = useState(false);
   const [activeEdgeForInsert, setActiveEdgeForInsert] = useState(null);
+  const [edgeInsertPosition, setEdgeInsertPosition] = useState(null);
   const [isRuleImpactModalOpen, setIsRuleImpactModalOpen] = useState(false);
   const [activeRuleForImpact, setActiveRuleForImpact] = useState(null);
   const [isAddNodeMenuOpen, setIsAddNodeMenuOpen] = useState(false);
   const [aiAddedBanner, setAiAddedBanner] = useState(null);
   const [showUndoBar, setShowUndoBar] = useState(false);
   const [undoSnapshot, setUndoSnapshot] = useState(null);
-  const [preflightHasBlocking, setPreflightHasBlocking] = useState(true);
+  const [preflightHasBlocking, setPreflightHasBlocking] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('Read purchasing lines from SAP BW, flag orders over $50K for controller review, auto-fix plant codes and write clean rows to S/4HANA.');
   const [activeTool, setActiveTool] = useState('move');
   // Node Property States (for editing inside modal)
@@ -557,19 +596,88 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     if (node.type === 'source') {
       sourceTestRunIdRef.current += 1;
       setSrcTesting(false);
-      if (node.system?.includes('File') || node.system?.includes('Excel') || sourceConfig?.engine === 'file_upload' || sourceConfig?.fileData) {
+      if (node.system?.includes('Upload') || node.system?.includes('File') || node.system?.includes('Excel') || sourceConfig?.engine === 'file_upload' || sourceConfig?.fileData) {
         setConnectMethod('upload');
       } else {
         applyEngineCredentials(node.system || node.title, node.table, false);
       }
     }
+    if (node.type === 'rules') {
+      setGovernanceMode(node.governanceMode ?? 'remediate');
+      setAutoFixActive(node.governanceMode !== 'strict');
+      setRulesList(node.rules ?? activeRules ?? []);
+    }
+    if (node.type === 'conditional') {
+      setCondTrueDest(node.trueDest ?? 'High-Value Review');
+      setCondFalseDest(node.falseDest ?? 'Standard Flow');
+      const predicate = node.condition || node.predicate || node.system || '';
+      const match = predicate.match(/^(\w+)\s*(>=|<=|!=|==|>|<|=)\s*(.+)$/);
+      if (match) {
+        setConditionField(match[1]);
+        setConditionOp(match[2]);
+        setConditionVal(match[3].replaceAll(',', ''));
+      }
+    }
+    if (node.type === 'target') {
+      setWriteMode(node.writeMode ?? targetConfig?.writeMode ?? 'append');
+      setTargetVerificationGate(node.targetVerificationGate ?? true);
+      if (node.table) setTgtTable(node.table);
+    }
+    if (node.type === 'hitl') {
+      setHitlTriggerPolicy(node.review?.triggerPolicy ?? 'amount_threshold');
+      setHitlReviewerRole(node.review?.reviewerRole ?? 'Procurement Controller');
+      setHitlSlaTimeout(node.review?.timeout ?? '8');
+      setHitlWebhook(node.review?.webhook ?? '');
+      setHitlActionMode(node.review?.actionMode ?? 'approve_reject');
+      setHitlConditionType(node.review?.conditionType ?? 'preset');
+      setHitlCustomField(node.review?.field ?? 'TOTAL_AMOUNT');
+      setHitlCustomOp(node.review?.op ?? '>');
+      setHitlCustomVal(node.review?.value ?? '50000');
+      setHitlCustomExpression(node.review?.expression ?? 'TOTAL_AMOUNT > 50000');
+    }
+    if (node.type === 'quarantine') {
+      setAuditLock(node.auditLock ?? true);
+      setQuarantineAlertWebhook(node.alertWebhook ?? true);
+      setQuarantineTable(node.table || targetConfig?.quarantineTable || '0PUR_C01_quarantine');
+    }
+    if (node.type === 'router') setRouterThreshold(Number.parseFloat(node.healthGate) || 90);
     setIsPropertyModalOpen(true);
   };
+
+  const openAiBuilder = () => {
+    setIsAddNodeMenuOpen(false);
+    setIsAddNodeModalOpen(false);
+    setIsPropertyModalOpen(false);
+    setIsPreflightOpen(false);
+    setIsTemplatesDropdownOpen(false);
+    setIsTelemetryDrawerOpen(false);
+    setIsAiModalOpen(false);
+    setIsBuildWithAiOpen(true);
+  };
+
+  useEffect(() => {
+    if (!canvasAction || !CANVAS_SCREENS.includes(currentScreen)) return;
+    clearCanvasAction(null);
+    setIsAddNodeMenuOpen(false);
+    setIsAddNodeModalOpen(canvasAction === 'add-node');
+    setAddNodeSearch('');
+    setIsPropertyModalOpen(false);
+    setIsPreflightOpen(canvasAction === 'preflight');
+    setIsEdgeInsertMenuOpen(false);
+    setIsRuleImpactModalOpen(false);
+    setIsTemplatesDropdownOpen(false);
+    setIsTelemetryDrawerOpen(false);
+    setIsAiModalOpen(false);
+    setIsBuildWithAiOpen(canvasAction === 'build-with-ai');
+    setAiPreview(null);
+    setCanvasActionPicker(['insert-node', 'edit-rule'].includes(canvasAction) ? canvasAction : null);
+  }, [canvasAction, currentScreen, clearCanvasAction]);
 
   // Rules Modal states
   const [rulesPrompt, setRulesPrompt] = useState(getDefaultPromptForTable(srcTable, 'sap_bw'));
   const [rulesList, setRulesList] = useState(activeRules || []);
   const [rulesGenerating, setRulesGenerating] = useState(false);
+  const [governanceMode, setGovernanceMode] = useState('remediate');
   const [autoFixActive, setAutoFixActive] = useState(true);
   const [showAddCustomRule, setShowAddCustomRule] = useState(false);
   const [newRuleField, setNewRuleField] = useState('');
@@ -631,7 +739,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   const [targetVerificationGate, setTargetVerificationGate] = useState(true);
   // Quarantine Modal states
   const [quarantineTable, setQuarantineTable] = useState(targetConfig?.quarantineTable || '0PUR_C01_quarantine');
-  const [quarantinePolicy, setQuarantinePolicy] = useState('audit_locked'); // 'audit_locked' | 'review_required'
+  const [auditLock, setAuditLock] = useState(true);
   const [quarantineAlertWebhook, setQuarantineAlertWebhook] = useState(true);
   const activeEngineKey = resolveEngineKey(srcDbType);
 
@@ -814,9 +922,9 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   }, [nodes]);
   // Fit Canvas and all nodes within window viewport, accurately centered in visible space above underbar
   const handleFitToWindow = useCallback((nodesToFit = null, customDrawerH = null) => {
-    const targetNodes = (Array.isArray(nodesToFit) && nodesToFit.length > 0)
+    const targetNodes = Array.isArray(nodesToFit)
       ? nodesToFit
-      : (nodesRef.current && nodesRef.current.length > 0 ? nodesRef.current : nodes);
+      : visibleNodesRef.current;
     if (!canvasRef.current || !targetNodes || targetNodes.length === 0) {
       setZoom(1);
       setPan({ x: 0, y: 0 });
@@ -830,30 +938,31 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       ? customDrawerH
       : (isTelemetryDrawerOpen ? telemetryDrawerHeight : 0);
 
-    const availableWidth = rect.width;
+    const drawerWidth = canvasRef.current.parentElement.querySelector('[data-ai-drawer]')?.offsetWidth ?? 0;
+    const availableWidth = Math.max(160, rect.width - drawerWidth);
     const availableHeight = Math.max(160, rect.height - drawerH);
 
     const minX = Math.min(...targetNodes.map(n => n.x));
-    const maxX = Math.max(...targetNodes.map(n => n.x + (n.width ? Math.min(n.width, 215) : 210)));
+    const maxX = Math.max(...targetNodes.map(n => n.x + CANVAS_NODE_WIDTH));
     const minY = Math.min(...targetNodes.map(n => n.y));
-    const maxY = Math.max(...targetNodes.map(n => n.y + (n.height || 135)));
+    const maxY = Math.max(...targetNodes.map(n => n.y + (nodeHeights[n.id] ?? n.height ?? 144)));
     const contentWidth = maxX - minX;
     const contentHeight = maxY - minY;
 
     if (contentWidth > 0 && contentHeight > 0) {
       // Balanced margins so all ports and cards sit comfortably in the visible space
-      const paddingX = 48;
-      const paddingY = 32;
+      const paddingX = Math.min(64, availableWidth * 0.08);
+      const paddingY = Math.min(68, availableHeight * 0.16);
       const scaleX = (availableWidth - paddingX * 2) / contentWidth;
       const scaleY = (availableHeight - paddingY * 2) / contentHeight;
-      const newZoom = Math.min(Math.max(Math.min(scaleX, scaleY), 0.48), 1.02);
+      const newZoom = Math.min(Math.max(Math.min(scaleX, scaleY), 0.15), 1);
       const centeredX = (availableWidth - contentWidth * newZoom) / 2 - minX * newZoom;
       const centeredY = (availableHeight - contentHeight * newZoom) / 2 - minY * newZoom;
 
-      setZoom(Number(newZoom.toFixed(2)));
+      setZoom(newZoom);
       setPan({ x: Math.round(centeredX), y: Math.round(centeredY) });
     }
-  }, [nodes, isTelemetryDrawerOpen, telemetryDrawerHeight]);
+  }, [nodeHeights, isTelemetryDrawerOpen, telemetryDrawerHeight]);
 
   // Initial Auto-fit to window when canvas mounts
   useEffect(() => {
@@ -1259,20 +1368,23 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       y: e.clientY - pan.y
     };
   };
+  const nodeMovedRef = useRef(false);
   const handleMouseMove = useCallback((e) => {
     if (draggingNodeId) {
       const newX = Math.round((e.clientX - pan.x) / zoom - dragOffsetRef.current.x);
       const newY = Math.round((e.clientY - pan.y) / zoom - dragOffsetRef.current.y);
-      setNodesState(prev => {
-        const next = prev.map(n => n.id === draggingNodeId ? { ...n, x: newX, y: newY } : n);
-        nodesRef.current = next;
-        return next;
-      });
+      const current = nodesRef.current.find(node => node.id === draggingNodeId);
+      if (!current || (!nodeMovedRef.current && Math.hypot(newX - current.x, newY - current.y) * zoom < 4)) return;
+      nodeMovedRef.current = true;
+      setIsDirty(true);
+      const next = nodesRef.current.map(node => node.id === draggingNodeId ? { ...node, x: newX, y: newY } : node);
+      nodesRef.current = next;
+      setNodesState(next);
     } else if (drawingEdge) {
       setDrawingEdge(prev => prev ? ({
         ...prev,
-        currentX: Math.round((e.clientX - pan.x) / zoom),
-        currentY: Math.round((e.clientY - pan.y) / zoom)
+        currentX: Math.round((e.clientX - canvasRef.current.getBoundingClientRect().left - pan.x) / zoom),
+        currentY: Math.round((e.clientY - canvasRef.current.getBoundingClientRect().top - pan.y) / zoom)
       }) : null);
     } else if (isPanning) {
       setPan({
@@ -1282,7 +1394,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     }
   }, [draggingNodeId, drawingEdge, isPanning, pan, zoom]);
   const handleMouseUp = useCallback(() => {
-    if (draggingNodeId) {
+    if (draggingNodeId && nodeMovedRef.current) {
       // Commit final dragged node coordinates to memory session and storage
       setWorkflowNodes(nodesRef.current);
     }
@@ -1302,13 +1414,14 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   // NODE DRAGGING & SELECTION (Popup opens ONLY when settings icon is clicked)
   // =========================================================================
   const handleNodeMouseDown = (e, nodeId) => {
-    if (activeTool === 'pan') {
+    if (e.button !== 0 || activeTool === 'pan') {
       // In pan mode, let canvas pan instead of dragging node
       return;
     }
     e.stopPropagation();
     setSelectedNodeId(nodeId);
     setSelectedEdgeId(null);
+    nodeMovedRef.current = false;
     setDraggingNodeId(nodeId);
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
@@ -1317,10 +1430,6 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       y: (e.clientY - pan.y) / zoom - node.y
     };
   };
-  const handleNodeClick = (e, node) => {
-    e.stopPropagation();
-    openNodeSettings(node);
-  };
   // =========================================================================
   // INTERACTIVE EDGE DRAWING (FROM PORT TO PORT)
   // =========================================================================
@@ -1328,8 +1437,8 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     e.stopPropagation();
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
-    const startX = node.x + node.width;
-    const startY = node.y + node.height / 2;
+    const startX = node.x + CANVAS_NODE_WIDTH;
+    const startY = node.y + (nodeHeights[node.id] ?? node.height ?? 144) / 2;
     setDrawingEdge({
       fromNodeId: nodeId,
       startX,
@@ -1346,6 +1455,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     if (!exists) {
       const fromNode = nodes.find(n => n.id === drawingEdge.fromNodeId);
       const toNode = nodes.find(n => n.id === targetNodeId);
+      if (!fromNode || !toNode) return;
       setEdges(prev => [
         ...prev,
         {
@@ -1353,7 +1463,8 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           from: drawingEdge.fromNodeId,
           to: targetNodeId,
           label: toNode?.type === 'quarantine' ? 'Violations' : 'Passed Stream',
-          variant: toNode?.type === 'quarantine' ? 'orange' : 'blue'
+          variant: toNode.type === 'quarantine' ? 'orange' : 'blue',
+          branch: canvasBranch({}, fromNode, toNode)
         }
       ]);
     }
@@ -1381,7 +1492,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
         handleFitToWindow();
       } else if (e.target && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
         if (e.key === 'a' || e.key === 'A') {
-          setIsAiModalOpen(true);
+          openAiBuilder();
         } else if (e.key === 'n' || e.key === 'N') {
           setIsAddNodeModalOpen(true);
         }
@@ -1399,23 +1510,26 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   // Enhancement 6.2: Accept AI Drafted Workflow
   const handleAcceptAiDraft = (draftResult) => {
     setUndoSnapshot({ nodes: [...nodes], edges: [...edges] });
-    const generatedNodes = (draftResult?.nodes || []).map((n, idx) => ({
+    const draftIds = new Map(draftResult.nodes.map(node => [node.id, `node-${crypto.randomUUID()}`]));
+    const generatedNodes = draftResult.nodes.map((n, idx) => ({
       ...n,
-      id: n.id || `node-${n.type || 'gen'}-${Date.now()}-${idx}`,
-      x: n.x ?? (150 + idx * 300),
+      id: draftIds.get(n.id),
+      x: (n.x ?? (150 + idx * 300)) + previewOffset,
       y: n.y ?? (240 + (idx % 2) * 40),
       width: n.width || 280,
       height: n.height || 140,
       isSuggested: false,
-      needsSetup: n.needs_setup ?? (n.type === 'target' || (n.title || '').toLowerCase().includes('postgresql')),
+      needsSetup: n.needsSetup ?? n.needs_setup ?? (n.type === 'target' || (n.title || '').toLowerCase().includes('postgresql')),
     }));
-    const generatedEdges = (draftResult?.edges || []).map((e, idx) => ({
-      ...e,
-      id: e.id || `edge-gen-${idx}`,
+    const generatedEdges = draftResult.edges.map(edge => ({
+      ...edge,
+      id: `edge-${crypto.randomUUID()}`,
+      from: draftIds.get(edge.from),
+      to: draftIds.get(edge.to)
     }));
 
-    setNodes(generatedNodes);
-    setEdges(generatedEdges);
+    setNodes(previous => [...previous, ...generatedNodes]);
+    setEdges(previous => [...previous, ...generatedEdges]);
 
     const setupNode = generatedNodes.find(n => n.needsSetup);
     if (setupNode) {
@@ -1457,7 +1571,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     if (!fromNode || !toNode) return;
 
     const newId = `node-${nodeType}-${Date.now()}`;
-    const midX = Math.round((fromNode.x + toNode.x) / 2);
+    const midX = toNode.x > fromNode.x ? fromNode.x + CANVAS_NODE_WIDTH + 40 : toNode.x - CANVAS_NODE_WIDTH - 40;
     const midY = Math.round((fromNode.y + toNode.y) / 2);
 
     let newNode;
@@ -1476,11 +1590,11 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           { id: 'r1', name: 'GL Account Format', field: 'gl_account', severity: 'High', action: 'Quarantine', expression: "regex_match(gl_account, '^[0-9]{4}-[0-9]{4}$')" }
         ]
       };
-    } else if (nodeType === 'router') {
+    } else if (nodeType === 'router' || nodeType === 'conditional') {
       newNode = {
         id: newId,
-        type: 'router',
-        title: 'Conditional Router',
+        type: 'conditional',
+        title: 'If / else router',
         subtitle: 'Split stream by confidence or condition',
         category: 'FLOW CONTROL',
         x: midX,
@@ -1514,10 +1628,14 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       };
     }
 
-    setNodes(prev => [...prev, newNode]);
+    const needsSpace = toNode.x > fromNode.x && midX + CANVAS_NODE_WIDTH + 40 > toNode.x;
+    const shift = midX + CANVAS_NODE_WIDTH + 40 - toNode.x;
+    setNodes(prev => [...prev.map(node =>
+      needsSpace && node.x >= toNode.x ? { ...node, x: node.x + shift } : node
+    ), newNode]);
     setEdges(prev => [
       ...prev.filter(e => e.id !== activeEdgeForInsert.id),
-      { id: `edge-${fromNode.id}-${newId}`, from: fromNode.id, to: newId },
+      { ...activeEdgeForInsert, id: `edge-${fromNode.id}-${newId}`, to: newId, branch: canvasBranch(activeEdgeForInsert, fromNode, toNode) },
       { id: `edge-${newId}-${toNode.id}`, from: newId, to: toNode.id },
     ]);
 
@@ -1533,7 +1651,12 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
 
   // Enhancement 6.5: Rule Impact Preview Save
   const handleSaveRuleFromImpact = (updatedRule) => {
-    setActiveRules(prev => (prev || []).map(r => r.name === updatedRule.name || r.id === updatedRule.id ? { ...r, ...updatedRule } : r));
+    const replaceRule = list => (list || []).map(rule => (updatedRule.id ? rule.id === updatedRule.id : rule.name === updatedRule.name) ? updatedRule : rule);
+    setRulesList(replaceRule);
+    setActiveRules(replaceRule);
+    if (selectedNode?.type === 'rules') {
+      setNodes(previous => previous.map(node => node.id === selectedNode.id ? { ...node, rules: replaceRule(rulesList) } : node));
+    }
     addNotification({
       type: 'success',
       title: `Rule Updated: ${updatedRule.name}`,
@@ -1556,7 +1679,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     const isBigQuery = item.type === 'bigquery';
     const newNode = {
       id: newId,
-      type: item.type,
+      type: item.type === 'file_upload' ? 'source' : item.type,
       title: item.name,
       system: item.system || item.name,
       x: Math.round(480 + (Math.random() * 60 - 30)),
@@ -1922,8 +2045,8 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
 
   const handleSaveRulesConfig = () => {
     setActiveRules(rulesList);
-    setNodes(prev => prev.map(n => n.type === 'rules' ? {
-      ...n,
+    setNodes(prev => prev.map(n => n.id === selectedNodeId ? {
+      ...n, rules: rulesList, governanceMode,
       ruleCount: rulesList.filter(r => r.selected !== false).length,
       status: autoFixActive ? 'Auto-Fix Armed' : 'Strict Check'
     } : n));
@@ -1953,9 +2076,11 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   const handleSaveConditionalConfig = () => {
     setNodes(prev => prev.map(n => n.id === selectedNodeId ? {
       ...n,
-      title: 'Conditional Router (If / Else)',
+      trueDest: condTrueDest, falseDest: condFalseDest,
+      title: 'If / else router',
       system: 'If-Else Router',
-      table: conditionField ? `${conditionField} ${conditionOp} ${conditionVal}` : 'Dynamic Predicate',
+      condition: conditionField ? `${conditionField} ${conditionOp} ${conditionVal}` : 'Dynamic Predicate',
+      table: 'TRUE · FALSE',
       status: 'Configured',
       rowCount: 'TRUE / FALSE'
     } : n));
@@ -1977,6 +2102,18 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       : (triggerLabels[hitlTriggerPolicy] || 'Condition Check');
     setNodes(prev => prev.map(n => n.id === selectedNodeId ? {
       ...n,
+      review: {
+        triggerPolicy: hitlTriggerPolicy,
+        reviewerRole: hitlReviewerRole,
+        timeout: hitlSlaTimeout,
+        webhook: hitlWebhook,
+        actionMode: hitlActionMode,
+        conditionType: hitlConditionType,
+        field: hitlCustomField,
+        op: hitlCustomOp,
+        value: hitlCustomVal,
+        expression: hitlCustomExpression,
+      },
       system: hitlReviewerRole,
       table: conditionText,
       status: hitlSlaTimeout === 'indefinite' ? 'No Deadline' : `SLA ${hitlSlaTimeout}h`,
@@ -2005,8 +2142,9 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     setIsPropertyModalOpen(false);
   };
   const handleSaveRouterConfig = () => {
-    setNodes(prev => prev.map(n => n.type === 'router' ? {
+    setNodes(prev => prev.map(n => n.id === selectedNodeId ? {
       ...n,
+      healthGate: `${routerThreshold}%`,
       status: `Gate: ${routerThreshold}%`,
       split: routerAutoFixPolicy === 'autonomous' ? 'Autonomous Remediated' : 'Strict Quarantined'
     } : n));
@@ -2028,8 +2166,8 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       user: 'cleanflow_writer',
       password: ''
     }));
-    setNodes(prev => prev.map(n => n.type === 'target' ? {
-      ...n,
+    setNodes(prev => prev.map(n => n.id === selectedNodeId ? {
+      ...n, writeMode, targetVerificationGate,
       system: tgtDbType,
       table: effectiveTable,
       status: `Write: ${writeMode.toUpperCase()}`
@@ -2041,10 +2179,10 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       ...prev,
       quarantineTable: quarantineTable
     }));
-    setNodes(prev => prev.map(n => n.type === 'quarantine' ? {
-      ...n,
+    setNodes(prev => prev.map(n => n.id === selectedNodeId ? {
+      ...n, auditLock, alertWebhook: quarantineAlertWebhook,
       table: quarantineTable,
-      status: quarantinePolicy === 'audit_locked' ? 'Audit Encrypted' : 'Review Required'
+      status: auditLock ? 'Audit Encrypted' : 'Review Required'
     } : n));
     setIsPropertyModalOpen(false);
   };
@@ -2159,23 +2297,25 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
     if (node.type === 'source') {
       return <img src={sourceIcon} alt="Source" className="w-5 h-5 object-contain" />;
     }
-    if (node.type === 'rules') return <Sparkles className="w-4 h-4 text-[#2D55F5]" />;
+    if (node.type === 'rules') return <FileCode2 className="size-5 text-[#2D55F5]" />;
     if (node.type === 'conditional') {
       return <img src={connectIcon} alt="Router" className="w-4 h-4 object-contain" />;
     }
     if (node.type === 'hitl') return <GitBranch className="w-4 h-4 text-[#C06815]" />;
-    if (node.type === 'router') return <Zap className="w-4 h-4 fill-current text-[#127A52]" />;
-    if (node.type === 'target') {
+    if (node.type === 'router') return <Zap className="w-4 h-4 fill-[#D2F442] text-[#0A0F1F]" />;
+    if (node.type === 'target' || node.type === 'bigquery' || node.type === 'pinecone') {
       return <img src={targetIcon} alt="Target" className="w-5 h-5 object-contain" />;
     }
     if (node.type === 'quarantine') return <img src={quarantineIcon} alt="DLQ" className="w-5 h-5 object-contain" />;
+    if (node.type === 'vector_matcher') return <Layers className="size-5 text-[#2D55F5]" />;
+    if (node.type === 'rag') return <BookOpen className="size-5 text-[#2D55F5]" />;
     return <Database className="w-4 h-4" />;
   };
 
   return (
     <div className="relative w-full h-full min-h-0 bg-[#F8FAFC] select-none flex flex-col">
       {/* 1. Full-Width Sub-Header Bar matching 02.1 Visual canvas · SAP clean core template.png */}
-      <div className="w-full bg-white dark:bg-[#18181C] border-b border-[#E3E6EE] dark:border-white/[0.08] px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 z-20">
+      <div className="w-full bg-white dark:bg-[#18181C] border-b border-[#E3E6EE] dark:border-white/[0.08] px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0 z-20">
         {/* Left: Back button + Title + Status Pill + Subtitle */}
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -2189,7 +2329,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
 
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-bold text-[#0A0F1F] dark:text-white truncate">
+              <h2 className="text-sm font-bold text-[#0A0F1F] dark:text-white truncate">
                 {activeWorkflowMeta?.name || activeThread?.name || 'SAP BW → S/4HANA Clean Core'}
               </h2>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -2197,12 +2337,12 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                   ? 'bg-blue-50 text-[#2D55F5] border border-blue-200'
                   : executionSummary
                     ? 'bg-emerald-50 text-[#127A52] border border-emerald-200'
-                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                    : nodes.length > 0 ? 'bg-emerald-50 text-[#127A52] border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   isExecutingDryRun ? 'bg-[#2D55F5] animate-ping' : executionSummary ? 'bg-[#127A52]' : 'bg-slate-400'
                 }`} />
-                {isExecutingDryRun ? 'Running' : executionSummary ? 'Dry run passed' : 'Ready'}
+                {isExecutingDryRun ? 'Running' : executionSummary ? 'Dry run passed' : nodes.length === 0 ? 'Draft' : 'Ready'}
               </span>
             </div>
 
@@ -2210,20 +2350,20 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
               {isExecutingDryRun
                 ? 'Sandbox dry run · nothing is written'
                 : executionSummary
-                  ? `Sandbox dry run · ${(executionSummary.total || 1420).toLocaleString()} rows · ${executionSummary.elapsedMs || '196.9'} ms`
-                  : `${nodes.length} nodes · ${activeRules?.length || 5} active rules · auto-saved just now`}
+                  ? `Sandbox dry run · ${(executionSummary.total).toLocaleString()} rows · ${executionSummary.elapsedMs ?? '—'} ms`
+                  : `${nodes.length} nodes · ${activeRules?.filter(rule => rule.selected !== false && rule.enabled !== false).length ?? 0} active rules`}
             </span>
           </div>
         </div>
 
         {/* Right: Template Picker + Save + Test in sandbox + Run live */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           {/* Template Dropdown matching 02.11 Template catalog.png */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setIsTemplatesDropdownOpen(!isTemplatesDropdownOpen)}
-              className="px-3.5 py-2 rounded-full border border-[#CDD2DE] dark:border-white/[0.12] bg-white dark:bg-[#18181C] hover:bg-[#F8FAFC] dark:hover:bg-white/[0.04] text-xs font-semibold text-[#0A0F1F] dark:text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="px-3 py-1.5 rounded-full border border-[#CDD2DE] dark:border-white/[0.12] bg-white dark:bg-[#18181C] hover:bg-[#F8FAFC] dark:hover:bg-white/[0.04] text-xs font-semibold text-[#0A0F1F] dark:text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
             >
               <img src={packIcon} alt="Template" className="w-3.5 h-3.5 object-contain" />
               <span>Template · {activeWorkflowMeta?.templateName || 'SAP Clean Core'}</span>
@@ -2299,7 +2439,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
             type="button"
             onClick={handleSaveWorkflow}
             disabled={isSavingWorkflow}
-            className={`px-3.5 py-2 rounded-full border text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-full border text-xs font-semibold shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 ${
               saveSuccess
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
                 : 'bg-white dark:bg-[#18181C] hover:bg-slate-50 dark:hover:bg-white/[0.04] border-[#CDD2DE] dark:border-white/[0.12] text-[#0A0F1F] dark:text-white'
@@ -2314,7 +2454,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           <button
             type="button"
             onClick={() => setIsPreflightOpen(true)}
-            className={`px-3.5 py-2 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+            className={`px-3 py-1.5 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
               preflightHasBlocking
                 ? 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800'
                 : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
@@ -2335,7 +2475,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
             type="button"
             onClick={handleDryRun}
             disabled={isExecutingDryRun || nodes.length === 0}
-            className="px-4 py-2 rounded-full border border-[#CDD2DE] dark:border-white/[0.15] bg-white dark:bg-[#18181C] hover:bg-[#F8FAFC] dark:hover:bg-white/[0.04] text-xs font-semibold text-[#0A0F1F] dark:text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs disabled:opacity-40"
+            className="px-3 py-1.5 rounded-full border border-[#CDD2DE] dark:border-white/[0.15] bg-white dark:bg-[#18181C] hover:bg-[#F8FAFC] dark:hover:bg-white/[0.04] text-xs font-semibold text-[#0A0F1F] dark:text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs disabled:opacity-40"
           >
             <img src={sandboxIcon} alt="Sandbox" className={`w-3.5 h-3.5 object-contain ${isExecutingDryRun ? 'animate-bounce' : ''}`} />
             <span>{isExecutingDryRun ? 'Testing...' : 'Test in sandbox'}</span>
@@ -2357,12 +2497,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       <div
         ref={canvasRef}
         onMouseDown={handleCanvasMouseDown}
-        className="relative flex-1 w-full h-full min-h-0 overflow-hidden cursor-grab active:cursor-grabbing"
-        style={{
-          backgroundImage: 'radial-gradient(#CBD5E1 1.25px, transparent 1.25px)',
-          backgroundSize: '24px 24px',
-          backgroundPosition: `${pan.x}px ${pan.y}px`
-        }}
+        className="relative flex-1 w-full min-h-0 overflow-hidden bg-[#F3F5F9] dark:bg-[#141416] cursor-grab active:cursor-grabbing"
       >
         {/* Floating Top-Left Helper Pill or Trace Banner (Matching Main-5.png) */}
         {traceRecordId ? (
@@ -2420,24 +2555,21 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
         )}
 
         {/* Enhancement N1: Empty Canvas Start Options Card */}
-        {nodes.length === 0 && (
+        {nodes.length === 0 && !isBuildWithAiOpen && !isAiModalOpen && (
           <div className="absolute inset-0 z-20 flex items-center justify-center p-6 pointer-events-none">
-            <div className="w-full max-w-xl bg-white/95 dark:bg-[#18181C]/95 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-white/[0.12] shadow-2xl p-8 pointer-events-auto text-center flex flex-col items-center">
-              <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/40 flex items-center justify-center text-[#2D55F5] mb-4 shadow-sm">
-                <Sparkles className="w-7 h-7" />
-              </div>
+            <div className="w-full max-w-xl bg-white/95 dark:bg-[#18181C]/95 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-white/[0.12] shadow-lg p-6 pointer-events-auto text-left flex flex-col">
               <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-                Start building your workflow
+                Start building
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-md">
-                Choose how you would like to construct this data pipeline. You can use our AI assistant or assemble modular components manually.
+                Describe what this workflow should do and DataX drafts the nodes for you to review. Or place nodes yourself.
               </p>
 
               {/* 2 Primary Options */}
               <div className="grid grid-cols-2 gap-4 w-full mt-6 text-left">
                 {/* Option 1: Build with AI */}
                 <button
-                  onClick={() => setIsBuildWithAiOpen(true)}
+                  onClick={() => openAiBuilder()}
                   className="p-4 rounded-xl border-2 border-blue-200 hover:border-[#2D55F5] bg-blue-50/40 hover:bg-blue-50/70 transition-all flex flex-col justify-between group cursor-pointer text-left"
                 >
                   <div>
@@ -2533,53 +2665,19 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
         >
           {/* SVG Connector Lines Overlay */}
           <svg className="absolute inset-0 w-[3000px] h-[2000px] pointer-events-none z-10 overflow-visible">
-            <defs>
-              <marker
-                id="edge-arrow-blue"
-                viewBox="0 0 10 10"
-                refX="6"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto"
-              >
-                <path d="M 0 2 L 7 5 L 0 8 z" fill="#3B82F6" />
-              </marker>
-              <marker
-                id="edge-arrow-gray"
-                viewBox="0 0 10 10"
-                refX="6"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto"
-              >
-                <path d="M 0 2 L 7 5 L 0 8 z" fill="#94A3B8" />
-              </marker>
-            </defs>
             {/* Render Saved Edges */}
-            {edges.map((edge) => {
-              const fromNode = getNode(edge.from);
-              const toNode = getNode(edge.to);
+            {visibleEdges.map((edge) => {
+              const fromNode = visibleNodes.find(node => node.id === edge.from);
+              const toNode = visibleNodes.find(node => node.id === edge.to);
               if (!fromNode || !toNode) return null;
-              const nodeW = 215;
-              const startX = fromNode.x + nodeW;
-              const startY = fromNode.y + 70;
-              const endX = toNode.x;
-              const endY = toNode.y + 70;
-              const dx = Math.abs(endX - startX) * 0.5;
-              const pathD = `M ${startX} ${startY} C ${startX + dx} ${startY}, ${endX - dx} ${endY}, ${endX} ${endY}`;
+              const { startX, startY, midX, midY, path: pathD } = canvasEdgeGeometry(fromNode, toNode, nodeHeights);
               const isSelected = selectedEdgeId === edge.id;
-              
-              const isQuarantineEdge = toNode.type === 'quarantine' || toNode.id === 'node-quarantine';
-              const isConditionalEdge = fromNode.type === 'conditional' || fromNode.id === 'node-conditional';
-              const isTrueBranch = isConditionalEdge && (toNode.type === 'hitl' || toNode.id === 'node-hitl' || edge.label?.includes('TRUE') || edge.label?.includes('High'));
-              const isFalseBranch = isConditionalEdge && (toNode.type === 'router' || toNode.id === 'node-router' || edge.label?.includes('FALSE') || edge.label?.includes('Routine'));
-
-              const midX = (startX + endX) / 2;
-              const midY = (startY + endY) / 2;
+              const isQuarantineEdge = toNode.type === 'quarantine';
+              const branch = canvasBranch(edge, fromNode, toNode);
+              const isTrueBranch = branch === 'true';
+              const isFalseBranch = branch === 'false';
               return (
-                <g key={edge.id} className="cursor-pointer pointer-events-auto group/edge">
+                <g key={edge.id} className={edge.isSuggested ? "opacity-50" : "cursor-pointer pointer-events-auto group/edge"}>
                   {/* Outer glow on hover/selected */}
                   <path
                     d={pathD}
@@ -2587,17 +2685,18 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                     stroke={isSelected ? '#2563EB' : 'transparent'}
                     strokeWidth={isSelected ? 6 : 14}
                     strokeOpacity={0.2}
+                    onMouseDown={event => event.stopPropagation()}
                     onClick={() => setSelectedEdgeId(edge.id)}
                   />
                   {/* Main Bezier Line */}
                   <path
                     d={pathD}
                     fill="none"
-                    stroke={isQuarantineEdge ? '#CBD5E1' : '#3B82F6'}
-                    strokeWidth={isSelected ? 3 : 2}
-                    strokeDasharray={isQuarantineEdge ? '4 4' : 'none'}
+                    stroke={isQuarantineEdge ? '#98A6BB' : '#6384FF'}
+                    strokeWidth={isSelected ? 2.5 : 1.6}
+                    strokeDasharray={isQuarantineEdge || edge.isSuggested ? '4 4' : 'none'}
                     strokeLinecap="round"
-                    markerEnd={isQuarantineEdge ? 'url(#edge-arrow-gray)' : 'url(#edge-arrow-blue)'}
+                    onMouseDown={event => event.stopPropagation()}
                     onClick={() => setSelectedEdgeId(edge.id)}
                   />
 
@@ -2626,7 +2725,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                     <g transform={`translate(${midX - 24}, ${midY - 10})`} className="pointer-events-none">
                       <rect width="48" height="20" rx="10" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1" />
                       <text x="24" y="13.5" textAnchor="middle" fill="#0A0F1F" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                        {executionSummary.total?.toLocaleString() || '1,420'}
+                        {executionSummary.total?.toLocaleString()}
                       </text>
                     </g>
                   )}
@@ -2634,7 +2733,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                     <g transform={`translate(${midX - 24}, ${midY - 10})`} className="pointer-events-none">
                       <rect width="48" height="20" rx="10" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1" />
                       <text x="24" y="13.5" textAnchor="middle" fill="#0A0F1F" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                        {executionSummary.clean?.toLocaleString() || '1,267'}
+                        {executionSummary.clean?.toLocaleString()}
                       </text>
                     </g>
                   )}
@@ -2642,9 +2741,16 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                   {/* Enhancement 6.4: Insert node button at edge midpoint (reveal on hover) */}
                   <g
                     transform={`translate(${midX}, ${midY})`}
+                    aria-label="Insert node on connection"
                     className="cursor-pointer group/insert opacity-0 group-hover/edge:opacity-100 transition-opacity"
+                    onMouseDown={event => event.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
+                      const anchor = e.currentTarget.getBoundingClientRect();
+                      setEdgeInsertPosition({
+                        x: anchor.left + anchor.width / 2,
+                        y: anchor.bottom + 8
+                      });
                       setActiveEdgeForInsert(edge);
                       setIsEdgeInsertMenuOpen(true);
                     }}
@@ -2677,13 +2783,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
               const fromNode = getNode(edge.from);
               const toNode = getNode(edge.to);
               if (!fromNode || !toNode) return null;
-              const nodeW = 215;
-              const startX = fromNode.x + nodeW;
-              const startY = fromNode.y + 70;
-              const endX = toNode.x;
-              const endY = toNode.y + 70;
-              const dx = Math.abs(endX - startX) * 0.5;
-              const pathD = `M ${startX} ${startY} C ${startX + dx} ${startY}, ${endX - dx} ${endY}, ${endX} ${endY}`;
+              const { path: pathD } = canvasEdgeGeometry(fromNode, toNode, nodeHeights);
               const particleColor = edge.variant === 'orange' ? '#F97316' : edge.variant === 'green' ? '#10B981' : '#3B82F6';
               return (
                 <g key={`particle-stream-${edge.id}`}>
@@ -2698,76 +2798,6 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                   </circle>
                 </g>
               );
-            })}
-            {/* Live 3-Way Split Edge Flow Badges */}
-            {executionSummary && edges.map((edge) => {
-              const fromNode = getNode(edge.from);
-              const toNode = getNode(edge.to);
-              if (!fromNode || !toNode) return null;
-              const nodeW = 215;
-              const startX = fromNode.x + nodeW;
-              const startY = fromNode.y + 70;
-              const endX = toNode.x;
-              const endY = toNode.y + 70;
-              const midX = (startX + endX) / 2;
-              const midY = (startY + endY) / 2;
-              const toTitle = (toNode.title || toNode.name || '').toLowerCase();
-              const fromTitle = (fromNode.title || fromNode.name || '').toLowerCase();
-              const isTargetClean = toNode.type === 'target' || toTitle.includes('clean') || toTitle.includes('lakehouse') || toTitle.includes('s/4hana');
-              const isQuarantine = toNode.type === 'quarantine' || toTitle.includes('quarantine') || toTitle.includes('dlq');
-              const isSourceFlow = fromNode.type === 'source';
-              const isRuleFlow = fromNode.type === 'rules' || toNode.type === 'clean_core';
-              if (isTargetClean) {
-                return (
-                  <g
-                    key={`badge-${edge.id}`}
-                    transform={`translate(${midX - 75}, ${midY - 14})`}
-                    className="cursor-pointer pointer-events-auto transition-transform hover:scale-105"
-                    onClick={() => setIsTelemetryDrawerOpen(true)}
-                  >
-                    <rect width="150" height="28" rx="14" fill="#064E3B" stroke="#10B981" strokeWidth="1.5" />
-                    <text x="75" y="18" textAnchor="middle" fill="#A7F3D0" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      ✓ {executionSummary.clean.toLocaleString()} Clean ({executionSummary.health}%)
-                    </text>
-                  </g>
-                );
-              }
-              if (isQuarantine) {
-                return (
-                  <g
-                    key={`badge-${edge.id}`}
-                    transform={`translate(${midX - 90}, ${midY - 14})`}
-                    className="cursor-pointer pointer-events-auto transition-transform hover:scale-105"
-                    onClick={() => setIsTelemetryDrawerOpen(true)}
-                  >
-                    <rect width="180" height="28" rx="14" fill="#78350F" stroke="#F59E0B" strokeWidth="1.5" />
-                    <text x="90" y="18" textAnchor="middle" fill="#FDE68A" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      ⚠ {executionSummary.quarantined} Quarantined ($1.42M)
-                    </text>
-                  </g>
-                );
-              }
-              if (isSourceFlow) {
-                return (
-                  <g key={`badge-${edge.id}`} transform={`translate(${midX - 65}, ${midY - 13})`}>
-                    <rect width="130" height="26" rx="13" fill="#0F172A" stroke="#3B82F6" strokeWidth="1.5" />
-                    <text x="65" y="17" textAnchor="middle" fill="#93C5FD" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      {executionSummary.total.toLocaleString()} Rows Streamed
-                    </text>
-                  </g>
-                );
-              }
-              if (isRuleFlow) {
-                return (
-                  <g key={`badge-${edge.id}`} transform={`translate(${midX - 60}, ${midY - 13})`}>
-                    <rect width="120" height="26" rx="13" fill="#0F172A" stroke="#8B5CF6" strokeWidth="1.5" />
-                    <text x="60" y="17" textAnchor="middle" fill="#C4B5FD" fontSize="10" fontWeight="bold" fontFamily="monospace">
-                      100% AST Verified
-                    </text>
-                  </g>
-                );
-              }
-              return null;
             })}
             {/* Render Live Edge being drawn */}
             {drawingEdge && (
@@ -2784,12 +2814,17 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           {/* =========================================================================
               RENDER OPERATIONAL NODES WITH PORTS (Matching Figma 02.1 & 02.14)
              ========================================================================= */}
-          {nodes.map((node) => {
+          {visibleNodes.map((node, index) => {
             const isSelected = selectedNodeId === node.id;
+            const nodeResult = dagNodeExecutions[node.id] ?? executionSummary?.nodeExecutions?.[node.id];
+            const details = nodeResult?.details;
             const isStageActive =
               (activeStageNodeId === node.id) ||
+              (activeStageNodeId === 'node-source' && node.type === 'source') ||
+              (activeStageNodeId === 'node-rules' && node.type === 'rules') ||
+              (activeStageNodeId === 'node-router' && node.type === 'router') ||
               (activeStageNodeId === 'committing' && (node.type === 'target' || node.type === 'quarantine'));
-            const nodeIndex = nodes.findIndex(n => n.id === node.id) + 1;
+            const nodeIndex = index + 1;
 
             const categoryLabel =
               node.type === 'source' ? 'Source' :
@@ -2810,11 +2845,11 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
             let dotClass = 'bg-[#2D55F5]';
 
             if (isStageActive) {
-              statusText = 'Running...';
+              statusText = 'Running';
               statusBadgeClass = 'bg-[#EBF0FF] text-[#2D55F5] border-[#2D55F5]/30 animate-pulse';
               dotClass = 'bg-[#2D55F5] animate-ping';
-            } else if (dagNodeExecutions[node.id] || executionSummary) {
-              if (node.type === 'hitl') {
+            } else if (nodeResult) {
+              if (nodeResult.status === 'PAUSED_HITL') {
                 statusText = 'Paused';
                 statusBadgeClass = 'bg-[#FEF6EE] text-[#B54708] border-[#FDB022]/40 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/50';
                 dotClass = 'bg-[#F79009]';
@@ -2840,12 +2875,12 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                 dotClass = 'bg-[#12B76A]';
               } else if (node.type === 'hitl') {
                 statusText = 'Armed';
-                statusBadgeClass = 'bg-[#EFF8FF] text-[#175CD3] border-[#B2DDFF]/50';
-                dotClass = 'bg-[#2D55F5]';
+                statusBadgeClass = 'bg-[#FFF4E3] text-[#A65300] border-[#F9D7A8]';
+                dotClass = 'bg-[#F79009]';
               } else if (node.type === 'target') {
                 statusText = 'Ready';
-                statusBadgeClass = 'bg-[#F8FAFC] text-[#344054] border-[#D0D5DD] dark:bg-slate-800 dark:text-slate-300';
-                dotClass = 'bg-[#667085]';
+                statusBadgeClass = 'bg-[#ECFDF3] text-[#027A48] border-[#6CE9A6]/40';
+                dotClass = 'bg-[#12B76A]';
               } else if (node.type === 'quarantine') {
                 statusText = 'Locked';
                 statusBadgeClass = 'bg-[#F8FAFC] text-[#344054] border-[#D0D5DD] dark:bg-slate-800 dark:text-slate-300';
@@ -2865,12 +2900,12 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
 
             // Subtitle text matching Image 2
             const subtitleText =
-              node.type === 'source' ? (node.system?.includes('InfoCube') || !node.system ? 'InfoCube\nHANA Cloud' : node.system) :
-              node.type === 'rules' ? 'Clean core ontologies' :
-              node.type === 'conditional' ? `${conditionField || 'TOTAL_AMOUNT'} ${conditionOp || '>'} ${conditionVal || '50,000'}` :
-              node.type === 'hitl' ? (hitlReviewerRole || 'Procurement controller') :
+              node.type === 'source' ? node.subtitle || (node.system?.includes('InfoCube') || !node.system ? 'InfoCube\nHANA Cloud' : node.system) :
+              node.type === 'rules' ? node.system || node.subtitle || 'Business validation' :
+              node.type === 'conditional' ? node.condition || node.predicate || node.system :
+              node.type === 'hitl' ? (node.system || 'Controller approval') :
               node.type === 'router' ? 'Clean · Fixed · Quarantined' :
-              node.type === 'target' ? (node.system?.includes('Clean') || !node.system ? 'Clean core' : node.system) :
+              node.type === 'target' ? node.subtitle || (node.system?.includes('Clean') || !node.system ? 'Clean core' : node.system) :
               node.type === 'quarantine' ? 'Dead-letter isolation' :
               (node.system || 'Configured node');
 
@@ -2883,7 +2918,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
               ];
             } else if (node.type === 'rules') {
               specs = [
-                { label: 'Rules', value: `${activeRules?.length || node.ruleCount || 5} active` },
+                { label: 'Rules', value: `${(node.rules ?? activeRules ?? []).filter(rule => rule.selected !== false && rule.enabled !== false).length} active` },
                 { label: 'Model', value: node.aiModel || 'gpt-5-mini' }
               ];
             } else if (node.type === 'conditional') {
@@ -2896,7 +2931,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
               ];
             } else if (node.type === 'router') {
               specs = [
-                { label: 'Health gate', value: '90%' }
+                { label: 'Health gate', value: node.healthGate || '90%' }
               ];
             } else if (node.type === 'target') {
               const tblDisplay = node.table
@@ -2919,22 +2954,32 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
               if (specs.length === 0) specs.push({ label: 'Status', value: 'Configured' });
             }
 
+            if (nodeResult) {
+              const format = value => value?.toLocaleString() ?? '—';
+              if (node.type === 'rules') specs = [{ label: 'Pass / held', value: `${format(nodeResult.rowsOut)} / ${format(details?.quarantinedTier3)}` }];
+              else if (node.type === 'conditional') specs = [{ label: 'TRUE / FALSE', value: `${format(details?.trueBranchRows)} / ${format(details?.falseBranchRows)}` }];
+              else if (node.type === 'hitl') specs = [{ label: 'Held', value: format(details?.heldCount) }];
+              else if (node.type === 'router') specs = [{ label: 'Clean / fixed', value: `${format(details?.clean)} / ${format(details?.autofixed)}` }];
+              else if (node.type === 'quarantine') specs = [{ label: 'Held', value: format(nodeResult.rowsOut) }];
+              else specs = [{ label: node.type === 'target' ? 'Staged' : 'Out', value: format(nodeResult.rowsOut) }];
+            }
+
             return (
               <div
                 key={node.id}
-                onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                data-canvas-node={node.id}
+                onMouseDown={(e) => { if (!node.isSuggested) handleNodeMouseDown(e, node.id); }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleNodeClick(e, node);
-                  openNodeSettings(node);
+                  if (!node.isSuggested && activeTool !== 'pan' && !nodeMovedRef.current) openNodeSettings(node);
                 }}
                 style={{
                   transform: `translate(${node.x}px, ${node.y}px)`,
-                  width: 215,
+                  width: CANVAS_NODE_WIDTH,
                   position: 'absolute',
                   zIndex: isStageActive ? 35 : isSelected ? 30 : 20
                 }}
-                className={`workflow-node-card relative group bg-white dark:bg-[#18181C] rounded-[20px] border transition-all select-none p-3.5 flex flex-col justify-between shadow-2xs ${
+                className={`workflow-node-card relative group bg-white dark:bg-[#18181C] rounded-2xl border transition-colors select-none p-3 flex flex-col justify-between shadow-2xs ${
                   activeTool === 'pan' ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
                 } ${
                   traceRecordId && (node.type === 'hitl' || node.type === 'target')
@@ -2947,22 +2992,22 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                           ? 'border-2 border-rose-600 bg-white dark:bg-[#18181C] shadow-lg'
                           : node.needsSetup
                             ? 'border-2 border-amber-600 bg-white dark:bg-[#18181C] shadow-md'
-                            : node.isSuggested
-                              ? 'border-2 border-dashed border-[#2D55F5] bg-white dark:bg-[#18181C] shadow-sm'
-                              : node.isRejected
-                                ? 'border-dashed border-slate-300 bg-white dark:bg-[#18181C] opacity-40 select-none'
+                            : node.isRejected
+                              ? 'border-dashed border-slate-300 bg-white dark:bg-[#18181C] opacity-40 select-none'
+                              : node.isSuggested
+                                ? 'border-2 border-dashed border-[#2D55F5] bg-white dark:bg-[#18181C] shadow-sm'
                                 : isStageActive
-                                  ? 'border-[#2D55F5] ring-4 ring-[#2D55F5]/30 shadow-xl scale-[1.02]'
+                                  ? 'border-[#2D55F5] ring-2 ring-[#2D55F5]/25 shadow-md'
                                   : isSelected
-                                    ? 'border-[#2D55F5] ring-3 ring-[#2D55F5]/25 shadow-xl'
-                                    : 'border-slate-200/90 dark:border-white/[0.08] hover:border-[#2D55F5]/60 hover:shadow-md'
+                                    ? 'border-[#2D55F5] ring-1 ring-[#2D55F5]/25 shadow-md'
+                                    : 'border-slate-200/90 dark:border-white/[0.08] shadow-sm hover:border-[#2D55F5]/60 hover:shadow-md'
                 }`}
               >
                 {/* 1. INPUT PORT (Left Side) */}
-                {node.type !== 'source' && (
+                {!node.isSuggested && node.type !== 'source' && (
                   <div
                     onMouseUp={(e) => handleCompleteEdge(e, node.id)}
-                    className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white dark:bg-[#18181C] border-2 border-slate-300 dark:border-slate-600 group-hover:border-[#2D55F5] flex items-center justify-center hover:scale-125 transition-all cursor-crosshair z-30 shadow-2xs"
+                    className="absolute -left-[7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white dark:bg-[#18181C] border border-slate-300 dark:border-slate-600 group-hover:border-[#2D55F5] flex items-center justify-center hover:scale-125 transition-all cursor-crosshair z-30 shadow-2xs"
                     title="Drop to connect edge here"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-[#2D55F5]" />
@@ -2970,10 +3015,10 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                 )}
 
                 {/* 2. OUTPUT PORT(S) */}
-                {node.type !== 'quarantine' && node.type !== 'target' && (
+                {!node.isSuggested && node.type !== 'quarantine' && node.type !== 'target' && (
                   <div
                     onMouseDown={(e) => handleStartEdge(e, node.id)}
-                    className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white dark:bg-[#18181C] border-2 border-slate-300 dark:border-slate-600 group-hover:border-[#2D55F5] flex items-center justify-center hover:scale-125 transition-all cursor-crosshair z-30 shadow-2xs"
+                    className="absolute -right-[7px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white dark:bg-[#18181C] border border-slate-300 dark:border-slate-600 group-hover:border-[#2D55F5] flex items-center justify-center hover:scale-125 transition-all cursor-crosshair z-30 shadow-2xs"
                     title="Drag to connect to another node"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-500 group-hover:bg-[#2D55F5]" />
@@ -3004,7 +3049,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                     ) : node.isSuggested ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border bg-blue-50 text-blue-700 border-blue-200/80 flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#2D55F5]" />
-                        Suggested by AI
+                        {node.status === 'accepted' ? 'Accepted' : node.isRejected ? 'Rejected' : 'Review'}
                       </span>
                     ) : node.isRejected ? (
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border bg-slate-100 text-slate-500 border-slate-200 flex items-center gap-1.5">
@@ -3023,33 +3068,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                 {/* Card Middle Row: Squircle Icon (strictly 20x20 in 40x40 container) + Title + Subtitle */}
                 <div className="flex items-start gap-3 my-2">
                   <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-100 dark:border-white/[0.08] flex items-center justify-center shrink-0 shadow-2xs">
-                    {node.type === 'source' ? (
-                      <img src={sourceIcon} alt="Source" className="w-5 h-5 object-contain shrink-0" />
-                    ) : node.type === 'rules' ? (
-                      <div className="relative w-5 h-5 flex items-center justify-center shrink-0">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-slate-700 dark:text-slate-200">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                          <line x1="16" y1="13" x2="8" y2="13" />
-                          <line x1="16" y1="17" x2="8" y2="17" />
-                        </svg>
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[#2D55F5] border border-white flex items-center justify-center text-white text-[9px] font-bold">
-                          +
-                        </div>
-                      </div>
-                    ) : node.type === 'conditional' ? (
-                      <img src={connectIcon} alt="Router" className="w-5 h-5 object-contain shrink-0" />
-                    ) : node.type === 'hitl' ? (
-                      <GitBranch className="w-5 h-5 text-slate-700 dark:text-slate-300 stroke-[1.75] shrink-0" />
-                    ) : node.type === 'router' ? (
-                      <Zap className="w-5 h-5 text-slate-800 dark:text-slate-200 fill-current shrink-0" />
-                    ) : node.type === 'target' ? (
-                      <img src={targetIcon} alt="Target" className="w-5 h-5 object-contain shrink-0" />
-                    ) : node.type === 'quarantine' ? (
-                      <img src={quarantineIcon} alt="DLQ" className="w-5 h-5 object-contain shrink-0" />
-                    ) : (
-                      <Database className="w-5 h-5 text-slate-700 dark:text-slate-300 stroke-[1.75] shrink-0" />
-                    )}
+                    {getNodeIcon(node)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h4 className="text-xs font-bold text-slate-900 dark:text-white leading-tight break-words">
@@ -3342,10 +3361,8 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
-                  onClick={() => {
-                    setIsAddNodeMenuOpen(false);
-                    setIsBuildWithAiOpen(true);
-                  }}
+                  type="button"
+                  onClick={openAiBuilder}
                   className="w-full text-left p-2 rounded-lg text-xs font-semibold text-slate-900 dark:text-white hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center gap-2.5 group cursor-pointer transition-colors"
                 >
                   <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#2D55F5] flex items-center justify-center shrink-0">
@@ -3391,7 +3408,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           </div>
 
           <button
-            onClick={() => setIsBuildWithAiOpen(true)}
+            onClick={() => openAiBuilder()}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-[#6D28D9] dark:text-[#C4B5FD] bg-[#F5F3FF] dark:bg-[#7C3AED]/20 hover:bg-[#EDE9FE] dark:hover:bg-[#7C3AED]/30 border border-[#DDD6FE] dark:border-[#7C3AED]/30 transition-all cursor-pointer shadow-xs"
             title="Ask AI (A)"
           >
@@ -3590,6 +3607,49 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           </button>
         </div>
       )}
+      {canvasActionPicker && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4" onClick={() => setCanvasActionPicker(null)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="canvas-action-title"
+            onClick={event => event.stopPropagation()}
+            onKeyDown={event => { if (event.key === 'Escape') setCanvasActionPicker(null); }}
+            className="w-full max-w-md max-h-[85dvh] overflow-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl dark:bg-[#18181C]"
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 id="canvas-action-title" className="font-semibold">{canvasActionPicker === 'insert-node' ? 'Choose a connection' : 'Choose a rule'}</h3>
+              <button type="button" autoFocus aria-label="Close" onClick={() => setCanvasActionPicker(null)}><X size={18} /></button>
+            </div>
+            {canvasActionPicker === 'insert-node' ? (
+              edges.length ? edges.map(edge => (
+                <button type="button" key={edge.id} className="block w-full rounded-lg p-2 text-left text-sm hover:bg-blue-50 dark:hover:bg-white/10" onClick={() => {
+                  setCanvasActionPicker(null);
+                  setActiveEdgeForInsert(edge);
+                  setEdgeInsertPosition({ x: window.innerWidth / 2 - 150, y: window.innerHeight / 4 });
+                  setIsEdgeInsertMenuOpen(true);
+                }}>
+                  {getNode(edge.from)?.title || edge.from} → {getNode(edge.to)?.title || edge.to}{edge.label && ` · ${edge.label}`}
+                </button>
+              )) : <p className="text-sm text-slate-500">Connect two nodes to insert a node between them.</p>
+            ) : (
+              nodes.some(node => node.type === 'rules' && (node.rules ?? activeRules)?.length) ? nodes.filter(node => node.type === 'rules').map(node => (
+                <div key={node.id} className="mb-2">
+                  <p className="px-2 text-xs text-slate-500">{node.title}</p>
+                  {(node.rules ?? activeRules ?? []).map(rule => (
+                    <button type="button" key={rule.id || rule.name} className="block w-full rounded-lg p-2 text-left text-sm hover:bg-blue-50 dark:hover:bg-white/10" onClick={() => {
+                      setCanvasActionPicker(null);
+                      openNodeSettings(node);
+                      setActiveRuleForImpact(rule);
+                      setIsRuleImpactModalOpen(true);
+                    }}>{rule.name || rule.title}</button>
+                  ))}
+                </div>
+              )) : <p className="text-sm text-slate-500">Add an AI rules node with a rule to edit.</p>
+            )}
+          </section>
+        </div>
+      )}
       <AddNodeCatalogModal
         isOpen={isAddNodeModalOpen}
         onClose={() => setIsAddNodeModalOpen(false)}
@@ -3603,49 +3663,14 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
          ========================================================================= */}
       {isPropertyModalOpen && selectedNode && (
         <div
-          className="fixed top-0 right-0 h-full w-[500px] max-w-[95vw] bg-white dark:bg-[#18181C] border-l border-[#CDD2DE] dark:border-white/[0.12] shadow-2xl z-40 flex flex-col font-sans animate-in slide-in-from-right duration-200"
+          role="region" aria-labelledby="node-settings-title" style={{ top: canvasRef.current?.offsetTop ?? 0 }}
+          className="absolute bottom-0 right-0 w-[520px] max-w-full bg-white dark:bg-[#18181C] border-l border-[#CDD2DE] dark:border-white/[0.12] shadow-2xl z-40 flex flex-col font-sans animate-in slide-in-from-right duration-200"
         >
           {/* Drawer Header */}
           <div className="px-6 py-4 border-b border-[#F1F3F7] dark:border-white/[0.06] flex items-center justify-between bg-white dark:bg-[#18181C] shrink-0">
-            <div className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center border text-white ${selectedNode.variant === 'green' ? 'bg-[#127A52] border-emerald-600' :
-                selectedNode.variant === 'orange' ? 'bg-amber-600 border-amber-700' :
-                  selectedNode.variant === 'purple' ? 'bg-[#7C3AED] border-purple-700' :
-                    selectedNode.variant === 'indigo' ? 'bg-indigo-600 border-indigo-700' :
-                      'bg-[#2D55F5] border-blue-700'
-                }`}>
-                {selectedNode.type === 'vector_matcher' ? <Layers className="w-5 h-5" /> :
-                  selectedNode.type === 'rag' ? <BookOpen className="w-5 h-5" /> :
-                    selectedNode.type === 'conditional' ? <GitBranch className="w-5 h-5" /> :
-                      selectedNode.type === 'hitl' ? <UserCheck className="w-5 h-5" /> :
-                        selectedNode.type === 'rules' ? <FileCode2 className="w-5 h-5" /> :
-                          selectedNode.type === 'router' ? <GitBranch className="w-5 h-5" /> :
-                            selectedNode.type === 'quarantine' ? <AlertTriangle className="w-5 h-5" /> :
-                              srcDbType === 'AWS S3' ? <FolderTree className="w-5 h-5" /> :
-                                (srcDbType === 'Azure' || srcDbType === 'Salesforce') ? <Cloud className="w-5 h-5" /> :
-                                  <Database className="w-5 h-5" />}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold text-[#5F6678] dark:text-slate-400 uppercase tracking-wider">
-                    Node {nodes.findIndex(n => n.id === selectedNode.id) + 1} · {
-                      selectedNode.type === 'source' ? 'Source' :
-                      selectedNode.type === 'rules' ? 'AI Rules' :
-                      selectedNode.type === 'conditional' ? 'Router' :
-                      selectedNode.type === 'hitl' ? 'Review' :
-                      selectedNode.type === 'router' ? 'Split' :
-                      selectedNode.type === 'target' ? 'Target' :
-                      selectedNode.type === 'quarantine' ? 'DLQ' : selectedNode.type
-                    }
-                  </span>
-                  <span className="px-2 py-0.2 rounded-full text-[9px] font-bold bg-[#EBF0FF] dark:bg-blue-950/50 text-[#2D55F5] border border-[#2D55F5]/20">
-                    {selectedNode.status || 'Active'}
-                  </span>
-                </div>
-                <h3 className="text-base font-bold text-[#0F172A] dark:text-white">
-                  {selectedNode.title || 'Configure Node'}
-                </h3>
-              </div>
+            <div>
+              <h3 id="node-settings-title" className="text-lg font-semibold">{inspectorFrames[selectedNode.type]?.[0] || selectedNode.title}</h3>
+              <p className="text-xs text-slate-500">Node {nodes.findIndex(node => node.id === selectedNode.id) + 1} · {inspectorFrames[selectedNode.type]?.[1] || selectedNode.system}</p>
             </div>
             <button
               onClick={() => setIsPropertyModalOpen(false)}
@@ -3655,7 +3680,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
             </button>
           </div>
           {/* Properties Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div key={selectedNode.id} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-5 space-y-4">
               {selectedNode.type === 'source' && (
                 <SourceModalPanel
                   selectedNode={selectedNode}
@@ -3707,8 +3732,10 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
 
               {selectedNode.type === 'rules' && (
                 <RulesModalPanel
+                  onEditRule={rule => { setActiveRuleForImpact(rule); setIsRuleImpactModalOpen(true); }}
                   rulesPrompt={rulesPrompt}
                   setRulesPrompt={setRulesPrompt}
+                  governanceMode={governanceMode} setGovernanceMode={setGovernanceMode}
                   autoFixActive={autoFixActive}
                   setAutoFixActive={setAutoFixActive}
                   rulesGenerating={rulesGenerating}
@@ -3765,6 +3792,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                 <QuarantineModalPanel
                   quarantineTable={quarantineTable}
                   setQuarantineTable={setQuarantineTable}
+                  auditLock={auditLock} setAuditLock={setAuditLock}
                   quarantineAlertWebhook={quarantineAlertWebhook}
                   setQuarantineAlertWebhook={setQuarantineAlertWebhook}
                 />
@@ -3900,51 +3928,19 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
               {/* =========================================================
                   PIPELINE CONNECTIONS STATUS (Auto-Wired by DAG Topology)
                  ========================================================= */}
-              <div className="pt-3 border-t border-slate-200 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-900">
-                    Pipeline Flow Connections
-                  </label>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                    <Check className="w-3 h-3 text-emerald-600" /> Auto-Wired in Template
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  This node is automatically connected to your workflow pipeline. You do not need to manually configure connections. You can also drag ports on the canvas to rewire.
-                </p>
-                {/* Show existing incoming & outgoing connections */}
-                <div className="space-y-1.5">
-                  {edges.filter(e => e.to === selectedNode.id).map(e => {
-                    const fromNode = nodes.find(n => n.id === e.from);
-                    return (
-                      <div key={e.id} className="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 flex items-center justify-between text-xs">
-                        <span className="flex items-center gap-1.5 text-emerald-950 font-medium">
-                          <span className="text-[10px] uppercase font-bold text-emerald-700 bg-white px-1.5 py-0.5 rounded border border-emerald-200">Incoming</span>
-                          <span>From: <strong>{fromNode?.title || e.from}</strong></span>
-                          {e.label && <span className="text-slate-400 font-mono text-[10px]">({e.label})</span>}
-                        </span>
-                        <span className="text-[10px] font-bold text-emerald-700">✓ Connected</span>
-                      </div>
-                    );
-                  })}
-                  {edges.filter(e => e.from === selectedNode.id).map(e => {
-                    const toNode = nodes.find(n => n.id === e.to);
-                    return (
-                      <div key={e.id} className="p-2 rounded-lg bg-blue-50/70 border border-blue-200 flex items-center justify-between text-xs">
-                        <span className="flex items-center gap-1.5 text-blue-950 font-medium">
-                          <span className="text-[10px] uppercase font-bold text-blue-700 bg-white px-1.5 py-0.5 rounded border border-blue-200">Outgoing</span>
-                          <span>To: <strong>{toNode?.title || e.to}</strong></span>
-                          {e.label && <span className="text-slate-400 font-mono text-[10px]">({e.label})</span>}
-                        </span>
-                        <span className="text-[10px] font-bold text-blue-700">✓ Connected</span>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="rounded-xl bg-slate-50 dark:bg-white/5 p-4 space-y-2 text-xs">
+                <strong>Connections</strong>
+                {edges.filter(edge => edge.from === selectedNode.id || edge.to === selectedNode.id).map(edge => {
+                  const incoming = edge.to === selectedNode.id;
+                  const neighborId = incoming ? edge.from : edge.to;
+                  const neighbor = nodes.find(node => node.id === neighborId);
+                  return <div key={edge.id} className="flex justify-between gap-3"><span>{incoming ? 'Incoming' : 'Outgoing'} → {neighbor?.title || neighborId}</span><span>{edge.label}</span></div>;
+                })}
+                <p className="text-slate-500">Drag ports on the canvas to rewire.</p>
                 {/* Collapsible toggle for custom rewiring */}
                 <details className="mt-2 text-xs group">
                   <summary className="font-semibold text-slate-500 hover:text-slate-800 cursor-pointer list-none flex items-center gap-1 py-1">
-                    <span className="text-[11px] text-blue-600 underline">⚙️ Advanced: Manually Link / Unlink Other Nodes (Optional)</span>
+                    <span className="text-[11px] text-blue-600 underline">Edit connections</span>
                   </summary>
                   <div className="pt-2 space-y-1.5">
                     {nodes.filter(n => n.id !== selectedNode.id).map((other) => {
@@ -3990,127 +3986,47 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
                 </details>
               </div>
             </div>
-            {/* Drawer Actions Footer (Matching Figma 02.2–02.9) */}
-            <div className="px-6 py-4 border-t border-[#F1F3F7] dark:border-white/[0.06] bg-slate-50/70 dark:bg-white/[0.02] flex items-center justify-between gap-3 shrink-0">
-              <button
-                onClick={() => handleDeleteNode(selectedNode.id)}
-                className="px-3.5 py-2 rounded-xl border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete Node
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsPropertyModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-white/[0.12] bg-white dark:bg-[#18181C] hover:bg-slate-100 dark:hover:bg-white/[0.06] text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
-                >
-                  Close
-                </button>
-                {selectedNode.type === 'source' ? (
-                  <button
-                    onClick={handleSaveSourceConfig}
-                    className="px-5 py-2 rounded-xl bg-[#2D55F5] text-white hover:bg-[#1E40AF] text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Source Settings
-                  </button>
-                ) : selectedNode.type === 'rules' ? (
-                  <button
-                    onClick={handleSaveRulesConfig}
-                    className="px-5 py-2 rounded-xl bg-[#7C3AED] text-white hover:bg-[#6D28D9] text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Rules Settings
-                  </button>
-                ) : selectedNode.type === 'router' ? (
-                  <button
-                    onClick={handleSaveRouterConfig}
-                    className="px-5 py-2 rounded-xl bg-[#7C3AED] text-white hover:bg-[#6D28D9] text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Router Settings
-                  </button>
-                ) : selectedNode.type === 'target' ? (
-                  <button
-                    onClick={handleSaveTargetConfig}
-                    className="px-5 py-2 rounded-xl bg-[#127A52] text-white hover:bg-[#0E6242] text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Target Settings
-                  </button>
-                ) : selectedNode.type === 'vector_matcher' ? (
-                  <button
-                    onClick={handleSaveVectorMatcherConfig}
-                    className="px-5 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Vector Matcher Settings
-                  </button>
-                ) : selectedNode.type === 'rag' ? (
-                  <button
-                    onClick={handleSaveRagConfig}
-                    className="px-5 py-2 rounded-xl bg-[#7C3AED] text-white hover:bg-[#6D28D9] text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save RAG Settings
-                  </button>
-                ) : selectedNode.type === 'conditional' ? (
-                  <button
-                    onClick={handleSaveConditionalConfig}
-                    className="px-5 py-2 rounded-xl bg-violet-600 text-white hover:bg-violet-700 text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Switch Settings
-                  </button>
-                ) : selectedNode.type === 'hitl' ? (
-                  <button
-                    onClick={handleSaveHitlConfig}
-                    className="px-5 py-2 rounded-xl bg-amber-600 text-white hover:bg-amber-700 text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Governance Gate Settings
-                  </button>
-                ) : selectedNode.type === 'pinecone' ? (
-                  <button
-                    onClick={handleSavePineconeConfig}
-                    className="px-5 py-2 rounded-xl bg-[#127A52] text-white hover:bg-[#0E6242] text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Pinecone Settings
-                  </button>
-                ) : selectedNode.type === 'bigquery' ? (
-                  <button
-                    onClick={handleSaveBigQueryConfig}
-                    className="px-5 py-2 rounded-xl bg-[#2D55F5] text-white hover:bg-[#1E40AF] text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save BigQuery Settings
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSaveQuarantineConfig}
-                    className="px-5 py-2 rounded-xl bg-amber-600 text-white hover:bg-amber-700 text-xs font-bold shadow-xs cursor-pointer transition-all"
-                  >
-                    Save Quarantine Settings
-                  </button>
-                )}
-              </div>
+            <div className="shrink-0 border-t border-slate-200 px-4 sm:px-6 py-3 flex items-center gap-2 text-xs font-semibold">
+              <button className="mr-auto p-2" onClick={() => setIsPropertyModalOpen(false)}>Close</button>
+              <button className="rounded-lg border border-red-200 text-red-600 px-3 py-2" onClick={() => handleDeleteNode(selectedNode.id)}>Delete node</button>
+              <button className="rounded-lg bg-[#3455ff] text-white px-3 py-2" onClick={{
+                source: handleSaveSourceConfig, rules: handleSaveRulesConfig, conditional: handleSaveConditionalConfig,
+                hitl: handleSaveHitlConfig, router: handleSaveRouterConfig, target: handleSaveTargetConfig,
+                quarantine: handleSaveQuarantineConfig, rag: handleSaveRagConfig, vector_matcher: handleSaveVectorMatcherConfig,
+                pinecone: handleSavePineconeConfig, bigquery: handleSaveBigQueryConfig,
+              }[selectedNode.type]}>Save {inspectorFrames[selectedNode.type]?.[2] || 'settings'}</button>
+
             </div>
           </div>
         )}
       {/* =========================================================================
           ENHANCEMENT 6.2: BUILD WITH AI DRAWER (N2-N6)
          ========================================================================= */}
-      <BuildWithAiDrawer
+      {(isBuildWithAiOpen || isAiModalOpen) && <BuildWithAiDrawer
         isOpen={isBuildWithAiOpen || isAiModalOpen}
+        top={canvasRef.current?.offsetTop ?? 0}
         onClose={() => {
           setIsBuildWithAiOpen(false);
           setIsAiModalOpen(false);
+          setAiPreview(null);
+          requestAnimationFrame(() => handleFitToWindow());
         }}
-        onAcceptDraft={handleAcceptAiDraft}
+        onPreviewDraft={setAiPreview}
+        onApplyToCanvas={handleAcceptAiDraft}
         existingNodes={nodes}
-      />
+      />}
 
       {/* =========================================================================
           ENHANCEMENT 6.3: PRE-FLIGHT CHECK POPOVER
          ========================================================================= */}
       <PreflightCheckPopover
+        top={(canvasRef.current?.offsetTop ?? 0) + 18}
         isOpen={isPreflightOpen}
         onClose={() => setIsPreflightOpen(false)}
         workflowId={activeThread?.id || 'current'}
         onFixIssue={(nodeId, check) => {
           setIsPreflightOpen(false);
-          const targetNode = nodes.find(n => n.id === nodeId || n.type === 'target');
+          const targetNode = nodes.find(n => n.id === nodeId) || nodes.find(n => n.type === 'target');
           if (targetNode) {
             openNodeSettings(targetNode);
           }
@@ -4138,18 +4054,20 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           setActiveEdgeForInsert(null);
         }}
         edge={activeEdgeForInsert}
+        position={edgeInsertPosition}
         fromNode={activeEdgeForInsert ? getNode(activeEdgeForInsert.from) : null}
         toNode={activeEdgeForInsert ? getNode(activeEdgeForInsert.to) : null}
         onSelectNodeType={handleInsertNodeOnEdge}
-        onOpenBuildWithAi={(promptText) => {
-          setIsBuildWithAiOpen(true);
+        onOpenBuildWithAi={() => {
+          openAiBuilder();
         }}
       />
 
       {/* =========================================================================
           ENHANCEMENT 6.5 & 6.6: RULE IMPACT PREVIEW MODAL
          ========================================================================= */}
-      <RuleImpactPreviewModal
+      {isRuleImpactModalOpen && <RuleImpactPreviewModal
+        columns={discoveredColumns}
         isOpen={isRuleImpactModalOpen}
         onClose={() => {
           setIsRuleImpactModalOpen(false);
@@ -4157,8 +4075,8 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
         }}
         rule={activeRuleForImpact || { id: 'rule_gl_format', name: 'GL Account Format', field: 'gl_account', severity: 'High', expression: "length(gl_account) == 8 AND gl_account != null" }}
         onSaveRule={handleSaveRuleFromImpact}
-        sampleSize={1420}
-      />
+        sampleSize={dryRunResult?.totalChecked || 1420}
+      />}
       {/* Pipeline Execution & Consensus Telemetry Drawer */}
       <CanvasTelemetryDrawer
         isOpen={isTelemetryDrawerOpen}

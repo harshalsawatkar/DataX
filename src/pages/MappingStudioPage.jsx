@@ -574,7 +574,7 @@ export default function MappingStudioPage() {
           onBackToWorkflows={() => navigateTo('workflows')}
         />
       ) : (
-        <div className="h-[calc(100vh-4rem)] w-full flex flex-col overflow-hidden bg-[#F8FAFC] dark:bg-[#0E1015] font-sans">
+        <div className="h-[var(--studio-content-height,calc(100vh-4rem))] w-full flex flex-col overflow-hidden bg-[#F8FAFC] dark:bg-[#0E1015] font-sans">
           <FmdCanvasStudio
             pipelineName={pipelineName}
             nodes={nodes}

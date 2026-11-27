@@ -612,6 +612,54 @@ export const PREBUILT_DOMAIN_PACKS = {
       { id: 'r_hc_2', name: 'DOB in Past', field: 'DOB', severity: 'Critical', code: 'DOB < CURRENT_DATE()', selected: true, desc: 'Date of birth sanity check' },
       { id: 'r_hc_3', name: 'Valid Gender Code', field: 'GENDER', severity: 'Warning', code: "GENDER IN ('M', 'F', 'O', 'U')", selected: true, desc: 'Standard HL7 gender code' }
     ]
+  },
+  supply_chain_inventory: {
+    id: 'supply_chain_inventory',
+    threadId: 'TH-0844',
+    name: 'Supply Chain Inventory Balancer',
+    domain: 'Supply chain',
+    desc: 'Reconcile warehouse counts with distribution-centre POs and resolve SKU naming discrepancies.',
+    pipeline: 'AWS S3 → Intelligence Engine → SAP S/4HANA',
+    status: 'draft',
+    statusLabel: 'Draft',
+    successRate: null,
+    healthScore: null,
+    runCount: 0,
+    runs: '0 runs',
+    source: {
+      engine: 'aws_s3',
+      connectionUri: 's3://datax-enterprise-lake/wms-telemetry/inventory_levels.parquet',
+      host: 's3.us-east-1.amazonaws.com',
+      port: '443',
+      database: 'Parquet Snappy',
+      user: 's3_wms_agent',
+      password: '••••••••',
+      table: 'inventory_levels.parquet',
+      totalRows: 6200,
+      rowCount: 6200,
+      availableTables: ['inventory_levels.parquet', 'sku_master.parquet', 'warehouse_bins.parquet'],
+      discoveredColumns: ['sku_barcode', 'stock_on_hand', 'safety_stock_min', 'bin_location', 'plant_code']
+    },
+    target: {
+      engine: 's4_hana',
+      connectionUri: 'https://s4h.corp.ondemand.com/sap/bc/srt/rfc/sap/z_bapi_goodsmvt',
+      host: 's4h.corp.ondemand.com',
+      port: '443',
+      database: 'S4HANA_PRD',
+      user: 'bapi_comm_user',
+      password: '••••••••',
+      table: 'inventory_reconciled_gold',
+      quarantineTable: 'inventory_variance_dlq',
+      writeMode: 'append',
+      targetNamingMode: 'suffix',
+      customTableName: ''
+    },
+    rules: [
+      { id: 'r_sc_1', name: 'UPC/EAN Barcode Validity', field: 'sku_barcode', severity: 'Critical', code: "REGEX_MATCH(sku_barcode, '^[0-9]{12,14}$')", selected: true, desc: 'Standard GS1 compliant barcode format' },
+      { id: 'r_sc_2', name: 'Stock On Hand Non-Negative', field: 'stock_on_hand', severity: 'Critical', code: 'stock_on_hand >= 0', selected: true, desc: 'Disallow corrupt phantom negative stock' },
+      { id: 'r_sc_3', name: 'Safety Stock Threshold', field: 'stock_on_hand', severity: 'Warning', code: 'stock_on_hand >= safety_stock_min', selected: true, desc: 'Trigger reorder warning when stock drops below threshold' },
+      { id: 'r_sc_4', name: 'Warehouse Bin Code Syntax', field: 'bin_location', severity: 'Warning', code: "REGEX_MATCH(bin_location, '^[A-Z]{2}-[0-9]{2}-[0-9]{2}$')", selected: true, desc: 'Valid aisle-rack-shelf bin identifier' }
+    ]
   }
 };
 
@@ -644,7 +692,8 @@ export function RuleEngineProvider({ children }) {
       PREBUILT_DOMAIN_PACKS.sap_bw_s4hana,
       PREBUILT_DOMAIN_PACKS.customer_master_reconciliation,
       PREBUILT_DOMAIN_PACKS.financial_gl_ledger,
-      PREBUILT_DOMAIN_PACKS.healthcare_hipaa
+      PREBUILT_DOMAIN_PACKS.healthcare_hipaa,
+      PREBUILT_DOMAIN_PACKS.supply_chain_inventory
     ];
   });
 
@@ -686,7 +735,7 @@ export function RuleEngineProvider({ children }) {
         const stored = localStorage.getItem(scopedKey) || localStorage.getItem('datax_canvas_nodes');
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length >= 2) return parsed;
+          if (Array.isArray(parsed)) return parsed;
         }
       }
     } catch (e) {
@@ -702,7 +751,7 @@ export function RuleEngineProvider({ children }) {
         const stored = localStorage.getItem(scopedKey) || localStorage.getItem('datax_canvas_edges');
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length >= 1) return parsed;
+          if (Array.isArray(parsed)) return parsed;
         }
       }
     } catch (e) {
@@ -1108,31 +1157,39 @@ export function RuleEngineProvider({ children }) {
       found = PREBUILT_DOMAIN_PACKS.sap_bw_s4hana;
     }
 
-    setActiveThread(found);
-    setActiveWorkflowMeta(found);
-
     const tmpl = getWorkflowTemplate(found);
+    const isScratch = found.packKey === 'scratch' || found.id === 'scratch';
+    const resolvedNodes = Array.isArray(found.nodes) ? found.nodes : isScratch ? [] : tmpl.nodes;
+    const resolvedEdges = Array.isArray(found.edges) ? found.edges : isScratch ? [] : tmpl.edges;
 
-    // If the thread has valid custom saved nodes (at least 2 nodes), use them;
-    // otherwise load the complete 5-node pipeline from the matching domain template!
-    const resolvedNodes = (Array.isArray(found.nodes) && found.nodes.length >= 2)
-      ? found.nodes
-      : tmpl.nodes;
+    const enrichedThread = {
+      ...found,
+      templateName: isScratch ? null : tmpl.shortName || tmpl.category,
+      nodes: resolvedNodes,
+      edges: resolvedEdges
+    };
 
-    const resolvedEdges = (Array.isArray(found.edges) && found.edges.length >= 1)
-      ? found.edges
-      : tmpl.edges;
+    setActiveThread(enrichedThread);
+    setActiveWorkflowMeta(enrichedThread);
 
     setWorkflowNodes(resolvedNodes);
     setWorkflowEdges(resolvedEdges);
 
-    const src = found.source || found.sourceConfig || tmpl.sourceConfig || PREBUILT_DOMAIN_PACKS.sap_bw_s4hana.source;
-    const tgt = found.target || found.targetConfig || tmpl.targetConfig || PREBUILT_DOMAIN_PACKS.sap_bw_s4hana.target;
+    const src = found.sourceConfig || found.source || tmpl.sourceConfig || PREBUILT_DOMAIN_PACKS.sap_bw_s4hana.source;
+    const tgt = found.targetConfig || found.target || tmpl.targetConfig || PREBUILT_DOMAIN_PACKS.sap_bw_s4hana.target;
     const rls = found.rules || tmpl.rules || PREBUILT_DOMAIN_PACKS.sap_bw_s4hana.rules;
 
     setSourceConfig(src);
     setTargetConfig(tgt);
     setActiveRules(rls);
+    setDryRunResult({
+      totalChecked: 0,
+      cleanCount: 0,
+      autoFixedCount: 0,
+      quarantinedCount: 0,
+      passRate: 0,
+      ruleOutcomes: []
+    });
     // Zero dummy data: Keep preview and sample rows empty until user tests connection
     rawRecordsRef.current = [];
     setPreviewRows([]);
@@ -1175,6 +1232,7 @@ export function RuleEngineProvider({ children }) {
         id: threadId,
         name: workflowName,
         description: currentMeta.description || activeThread?.description || 'Custom autonomous CleanFlow pipeline with node-based orchestration.',
+        packKey: currentMeta.packKey || activeThread?.packKey,
         domainPackId: currentMeta.domainPackId || activeThread?.domainPackId || 'custom',
         category: currentMeta.category || activeThread?.category || 'ERP Modernization',
         badge: currentMeta.badge || activeThread?.badge || 'Custom Pipeline',
@@ -1214,11 +1272,12 @@ export function RuleEngineProvider({ children }) {
         console.warn('Network save error, fallback to local storage:', fetchErr);
       }
 
-      const finalRecord = backendSaved || {
+      const finalRecord = {
         ...payload,
         nodesCount: nodesToSave.length,
         edgesCount: edgesToSave.length,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        ...backendSaved
       };
 
       // 2. Update threads list in context so Workflows page reflects it immediately
@@ -1550,7 +1609,7 @@ export function RuleEngineProvider({ children }) {
             duration: data.elapsedMs ? `${(data.elapsedMs / 1000).toFixed(2)}s` : '0.28s',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
           };
-          setDryRunResult(outcome);
+          setDryRunResult({ ...outcome, threadId: activeThread?.id });
           setPipelineStatus('COMPLETED');
 
           // Sync runs and thread state with server
@@ -1611,11 +1670,12 @@ export function RuleEngineProvider({ children }) {
 
     setDryRunResult(prev => ({
       ...result,
+      threadId: activeThread?.id,
       ruleOutcomes: prev.ruleOutcomes
     }));
     setPipelineStatus('COMPLETED');
     return result;
-  }, [sourceConfig, targetConfig, activeRules, autoFixEnabled, dynamicHealthScore, sampleData, userId, userEmail, tenantId, activeThread, fetchServerRuns, fetchServerThreads]);
+  }, [sourceConfig, targetConfig, activeRules, autoFixEnabled, dynamicHealthScore, sampleData, userId, userEmail, tenantId, activeThread, workflowNodes, workflowEdges, fetchServerRuns, fetchServerThreads]);
 
   // Action: Ingest user-uploaded dataset (CSV/Excel/JSON)
   const setUploadedDataset = useCallback((records, fileName, columns) => {
