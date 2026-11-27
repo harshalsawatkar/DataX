@@ -77,12 +77,12 @@ describe('FMD Mapping Studio API & Catalog Integration', () => {
     expect(fetch.mock.calls[5][0]).toBe(`${API_BASE_URL}/fmd/audit/verify`);
   });
 
-  it('registers FMD Mapping Studio in the platform navigation directory', () => {
+  it('registers Schema & Migration Studio in the platform navigation directory', () => {
     const ops = DIRECTORY_SECTIONS.find((s) => s.group === 'OPERATIONS');
     expect(ops).toBeDefined();
     const studio = ops.items.find((i) => i.screen === 'mapping-studio');
     expect(studio).toBeDefined();
-    expect(studio.label).toBe('FMD Mapping Studio');
+    expect(studio.label).toBe('Schema & Migration Studio');
   });
 
   it('resolves available field keys robustly without producing undefined in dropdown', () => {

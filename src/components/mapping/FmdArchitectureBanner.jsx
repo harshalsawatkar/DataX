@@ -22,7 +22,7 @@ export default function FmdArchitectureBanner({
             <span>SAP Material Master · TIME R3.2</span>
           </div>
           <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white">
-            FMD Mapping Studio &amp; SAP BODS Staging Fabric
+            Schema &amp; Migration Studio — SAP FMD &amp; BODS Staging Fabric
           </h1>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
             Read multi-tab Excel FMDs across SUSTAIN, ATLAS, CONS &amp; CMMS/MAXIMO, compare field rules like <span className="font-mono text-[#D4FF3A]">MAKT-MAKTX</span>, detect inconsistencies, and stage preload records + <span className="font-mono text-amber-300">Z_ERRORLOG</span> for SAP BODS.

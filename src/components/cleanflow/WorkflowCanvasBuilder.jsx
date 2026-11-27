@@ -75,6 +75,7 @@ import { RunningDryRunModal, DryRunResultsModal } from '../workflows/dryrun';
 import { addNotification } from '../../services/notificationService';
 import { useNavigation } from '../../context/NavigationContext';
 import { useRuleEngine } from '../../context/RuleEngineContext';
+import { useToast } from '../../context/ToastContext';
 import { getTableCatalog, getTableData } from '../../data/sampleDatasets';
 import { callAiRuleEngine, getDefaultPromptForTable, synthesizeSemanticRules } from '../../utils/aiRuleSynthesizer';
 import { TEMPLATE_AUTOFILLS, getWorkflowTemplate } from '../../data/workflowTemplates';
@@ -93,6 +94,7 @@ import uploadIcon from '../../assets/icons/upload.png';
 
 export default function WorkflowCanvasBuilder({ onMoveToNext }) {
   const { navigateTo } = useNavigation();
+  const { showToast } = useToast();
   const {
     sourceConfig,
     setSourceConfig,
@@ -1637,12 +1639,18 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
 
     if (missing.length > 0) {
       setSrcTesting(false);
+      const errMsg = `Missing required credentials: ${missing.join(', ')}`;
       setSrcTestMeta({
         nodeId: testedNodeId,
         success: false,
         latencyMs: 0,
-        error: `Missing required credentials: ${missing.join(', ')}`,
-        message: `Missing required credentials: ${missing.join(', ')}`
+        error: errMsg,
+        message: errMsg
+      });
+      showToast({
+        type: 'warning',
+        title: 'Credentials Required',
+        message: errMsg
       });
       return;
     }
@@ -1682,6 +1690,7 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           setSrcTable(targetTable);
         }
 
+        const successMsg = res.message || `Connected successfully to ${srcDbType} endpoint (${res.latencyMs || 34}ms). Discovered ${discoveredTables.length} tables.`;
         setSrcTestMeta({
           nodeId: testedNodeId,
           success: true,
@@ -1689,7 +1698,13 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           database: resolvedDb,
           tables: discoveredTables,
           tableCount: res.tableCount || discoveredTables.length,
-          message: res.message || `Connected successfully to ${srcDbType} endpoint.`
+          message: successMsg
+        });
+
+        showToast({
+          type: 'success',
+          title: 'Database Connected',
+          message: successMsg
         });
 
         // Immediately sample live 5 rows & schema columns from the selected table
@@ -1703,23 +1718,37 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
           password: srcPass,
         });
       } else {
+        const failureMsg = res?.error || res?.message || 'Connection failed: Unable to connect to database.';
         setSrcTestMeta({
           nodeId: testedNodeId,
           success: false,
           latencyMs: res?.latencyMs || 0,
-          error: res?.error || res?.message || 'Connection failed: Unable to connect to database.',
-          message: res?.message || res?.error || 'Connection failed'
+          error: failureMsg,
+          message: failureMsg
+        });
+        showToast({
+          type: 'error',
+          title: 'Database Connection Failed',
+          message: failureMsg,
+          durationMs: 7000
         });
       }
     } catch (err) {
       if (sourceTestRunIdRef.current !== testRunId) return;
       setSrcTesting(false);
+      const networkErrMsg = err?.message || 'Connection request failed';
       setSrcTestMeta({
         nodeId: testedNodeId,
         success: false,
         latencyMs: 0,
-        error: err?.message || 'Connection request failed',
-        message: 'Connection request failed'
+        error: networkErrMsg,
+        message: networkErrMsg
+      });
+      showToast({
+        type: 'error',
+        title: 'Connection Error',
+        message: networkErrMsg,
+        durationMs: 7000
       });
     }
   };
@@ -1737,25 +1766,45 @@ export default function WorkflowCanvasBuilder({ onMoveToNext }) {
       }, true);
       setTgtTesting(false);
       if (res && res.success) {
+        const successMsg = res.message || 'Connected to target database.';
         setTgtTestMeta({
           success: true,
           latencyMs: res.latencyMs || 42,
           tables: res.tables || [],
-          message: res.message || 'Connected to target database.'
+          message: successMsg
+        });
+        showToast({
+          type: 'success',
+          title: 'Target Database Connected',
+          message: successMsg
         });
       } else {
+        const failureMsg = res?.error || res?.message || 'Target connection failed';
         setTgtTestMeta({
           success: false,
-          error: res?.error || res?.message || 'Target connection failed',
-          message: res?.message || 'Target connection failed'
+          error: failureMsg,
+          message: failureMsg
+        });
+        showToast({
+          type: 'error',
+          title: 'Target Connection Failed',
+          message: failureMsg,
+          durationMs: 7000
         });
       }
     } catch (err) {
       setTgtTesting(false);
+      const networkErrMsg = err?.message || 'Target connection failed';
       setTgtTestMeta({
         success: false,
-        error: err?.message || 'Target connection failed',
-        message: 'Target connection failed'
+        error: networkErrMsg,
+        message: networkErrMsg
+      });
+      showToast({
+        type: 'error',
+        title: 'Target Connection Error',
+        message: networkErrMsg,
+        durationMs: 7000
       });
     }
   };

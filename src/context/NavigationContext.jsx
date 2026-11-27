@@ -33,7 +33,11 @@ const SCREEN_TITLES = {
   runs: 'Pipeline Execution Telemetry',
   login: 'Sign In',
   register: 'Sign Up',
-  'legacy-poc': 'SAP BW S/4HANA Modernizer'
+  'legacy-poc': 'SAP BW S/4HANA Modernizer',
+  'mapping-studio': 'Schema & Migration Studio',
+  'schema-studio': 'Schema & Migration Studio',
+  'migration-studio': 'Schema & Migration Studio',
+  'fmd-studio': 'Schema & Migration Studio'
 };
 
 const NavigationContext = createContext(null);

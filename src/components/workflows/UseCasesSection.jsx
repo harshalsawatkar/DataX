@@ -188,7 +188,7 @@ export default function UseCasesSection({
             </div>
 
             <h3 className="font-bold text-sm sm:text-base text-[#0A0F1F] dark:text-white group-hover:text-[#2D55F5] transition-colors tracking-tight">
-              FMD mapping & BODS staging
+              Schema &amp; Migration Studio (SAP FMD &amp; BODS)
             </h3>
 
             <p className="text-xs text-[#5F6678] dark:text-slate-400 leading-relaxed mt-2">

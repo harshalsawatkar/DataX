@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, useUser } from '../../context/AuthContext';
 import { NavigationProvider, useNavigation } from '../../context/NavigationContext';
 import { RuleEngineProvider } from '../../context/RuleEngineContext';
+import { ToastProvider } from '../../context/ToastContext';
 import DataXAppShell from '../common/DataXAppShell';
 
 // Pages
@@ -319,12 +320,14 @@ export default function DataXPoc({ onBackToWebsite }) {
 
   // Authenticated: Render DataX Multi-Tenant SaaS Workspace with Constant Layout Sidebar
   return (
-    <RuleEngineProvider>
-      <NavigationProvider initialScreen="threads">
-        <DataXAppShell onSwitchToMarketing={onBackToWebsite}>
-          <ScreenRenderer onBackToWebsite={onBackToWebsite} />
-        </DataXAppShell>
-      </NavigationProvider>
-    </RuleEngineProvider>
+    <ToastProvider>
+      <RuleEngineProvider>
+        <NavigationProvider initialScreen="threads">
+          <DataXAppShell onSwitchToMarketing={onBackToWebsite}>
+            <ScreenRenderer onBackToWebsite={onBackToWebsite} />
+          </DataXAppShell>
+        </NavigationProvider>
+      </RuleEngineProvider>
+    </ToastProvider>
   );
 }

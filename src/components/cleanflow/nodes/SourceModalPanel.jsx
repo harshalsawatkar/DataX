@@ -79,7 +79,7 @@ export default function SourceModalPanel({
       } else {
         await fmdApi.uploadSource({ fileName: uploadedFileMeta.name, contentBase64: uploadedRawBase64 });
       }
-      setSyncNotice('Synced to FMD Mapping Studio');
+      setSyncNotice('Synced to Schema & Migration Studio');
       if (onNavigateToMappingStudio) onNavigateToMappingStudio();
     } catch (err) {
       setSyncNotice(`Sync failed: ${err.message}`);
@@ -587,24 +587,20 @@ export default function SourceModalPanel({
                 Pings endpoint & discovers live collections/tables
               </span>
             </div>
-            <div className="min-w-0 flex items-center gap-3">
+            <div className="min-w-0 flex items-center gap-2.5">
               {srcTestMeta && srcTestMeta.nodeId === selectedNode.id && (
                 srcTestMeta.success ? (
-                  <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 shadow-xs animate-in fade-in">
-                    <Check className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-emerald-700 flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-2xs animate-in fade-in">
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     Connected ({srcTestMeta.latencyMs}ms)
                   </span>
                 ) : (
                   <span
-                    className="min-w-0 max-w-[340px] text-xs font-bold text-rose-700 flex items-center gap-1.5 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200 shadow-xs animate-in fade-in whitespace-nowrap"
+                    className="text-xs font-bold text-rose-700 flex items-center gap-1.5 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200 shadow-2xs animate-in fade-in"
                     title={srcTestMeta.error || srcTestMeta.message}
                   >
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-500" />
-                    <span className="truncate">
-                      {(srcTestMeta.error || srcTestMeta.message || '').toLowerCase().startsWith('missing required credentials')
-                        ? 'Missing credentials'
-                        : srcTestMeta.error || srcTestMeta.message || 'Connection failed'}
-                    </span>
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    Connection Failed
                   </span>
                 )
               )}
