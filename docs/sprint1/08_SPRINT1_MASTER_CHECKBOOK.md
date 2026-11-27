@@ -11,7 +11,7 @@
 | Phase | Milestone Name | Plans Covered | Tasks | Status | Completed Date |
 | :---: | :--- | :---: | :---: | :---: | :---: |
 | **0** | Repo Hygiene, Remote Branch Cleanup & VM Deploy Auth | Pre-Sprint | `S1-01` – `S1-05` | ⏳ In Progress (`2/5`) | — |
-| **1** | Cost Circuit Breakers, DPDP PII Spine & Zero-Stub Cleanup | Plans `01, 02, 03` | `S1-06` – `S1-17` | ⏳ In Progress (`3/12`) | — |
+| **1** | Cost Circuit Breakers, DPDP PII Spine & Zero-Stub Cleanup | Plans `01, 02, 03` | `S1-06` – `S1-17` | ⏳ In Progress (`6/12`) | — |
 | **2** | Shared AI Substrate: Local ONNX Embeddings, `pgvector` Hybrid RAG & LangGraph | Plan `02` | `S1-18` – `S1-26` | ⬜ Pending | — |
 | **3** | 5-Tier Million-Row & Multi-Table Zero-Token Intelligence Engine | Plan `05` | `S1-27` – `S1-36` | ⬜ Pending | — |
 | **4** | Flagship MVP #1: "1-Click DB X-Ray, Safe Clear & Executive Advisor" | Plan `06` | `S1-37` – `S1-46` | ⬜ Pending | — |
@@ -45,11 +45,11 @@
   *Gate:* `pytest tests/test_llm_gateway.py` verifies cache hit = `0` tokens and 26th loop call trips breaker cleanly.
 - [x] **S1-08** `[Core]` Route all direct `AzureOpenAI` calls in [`backend/service.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/service.py) and [`backend/engines/fmd_mapping_engine.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/engines/fmd_mapping_engine.py) through `llm_gateway.py` and expose `GET /governance/llm-budget` telemetry.  
   *Gate:* `Select-String -Path backend\**\*.py -Pattern "AzureOpenAI\("` appears ONLY inside `llm_gateway.py`.
-- [ ] **S1-09** `[Dev-2: WP-D1]` Create **`backend/core/pii_classifier.py`** with exact checksum validators: **Aadhaar 12-digit Verhoeff $D_5$**, **PAN**, **GSTIN Modulo-36**, **IFSC**, **UPI VPA**, **+91 Mobile**, **Credit Card Luhn**, **US SSN**, **Email**, and **API Secrets**.  
+- [x] **S1-09** `[Dev-2: WP-D1]` Create **`backend/core/pii_classifier.py`** with exact checksum validators: **Aadhaar 12-digit Verhoeff $D_5$**, **PAN**, **GSTIN Modulo-36**, **IFSC**, **UPI VPA**, **+91 Mobile**, **Credit Card Luhn**, **US SSN**, **Email**, and **API Secrets**.  
   *Gate:* `pytest tests/test_pii_classifier.py` passes $\ge 18$ positive & negative checksum tests (0 false positives on 12-digit order IDs).
-- [ ] **S1-10** `[Dev-2: WP-D1]` Add Format-Preserving Encryption (FPE) synthetic generators for Indian PII (`Aadhaar`, `PAN`, `GSTIN`) into [`privacy_gateway_engine.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/engines/privacy_gateway_engine.py) `TokenVault` and wire `ai_firewall_engine.py`, `consensus_engine.py`, and `ml_certification_engine.py` to `pii_classifier.py`.  
+- [x] **S1-10** `[Dev-2: WP-D1]` Add Format-Preserving Encryption (FPE) synthetic generators for Indian PII (`Aadhaar`, `PAN`, `GSTIN`) into [`privacy_gateway_engine.py`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/engines/privacy_gateway_engine.py) `TokenVault` and wire `ai_firewall_engine.py`, `consensus_engine.py`, and `ml_certification_engine.py` to `pii_classifier.py`.  
   *Gate:* Round-trip tokenize $\to$ detokenize test passes on mixed English/Hindi prompts + `tests/egress_block_test.py` passes 6/6.
-- [ ] **S1-11** `[Dev-2: WP-D1]` Purge fake connector success responses in [`backend/connectors/connectors.py:158-198`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/connectors/connectors.py#L158-L198) so unconfigured/bogus credentials return honest `success: False` errors instead of hardcoded SAP tables.  
+- [x] **S1-11** `[Dev-2: WP-D1]` Purge fake connector success responses in [`backend/connectors/connectors.py:158-198`](file:///h:/AAVIL%20Inc/DataX/DataX/backend/connectors/connectors.py#L158-L198) so unconfigured/bogus credentials return honest `success: False` errors instead of hardcoded SAP tables.  
   *Gate:* `pytest tests/test_connectors_honesty.py` confirms bogus Snowflake/MySQL/SAP hosts return `success == False`.
 - [ ] **S1-12** `[Dev-2: WP-D1]` Implement real **MySQL (`pymysql`)** and **SQL Server (`pymssql`/`pyodbc`)** table discovery & parameterized sampling in `connectors.py` + `studio_io_engine.py`, with `deploy/docker-compose.test-dbs.yml`.  
   *Gate:* Live discovery + 25-row sample verified against Dockerized Postgres 16 & MySQL 8 containers.

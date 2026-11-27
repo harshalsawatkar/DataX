@@ -61,7 +61,18 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
                 unique_values[col].add(s_val)
                 # Check for critical unmasked PII
                 col_lower = col.lower()
-                if "ssn" in col_lower or SSN_REGEX.match(s_val):
+                try:
+                    try:
+                        from core.pii_classifier import get_pii_classifier
+                    except ImportError:
+                        from pii_classifier import get_pii_classifier
+                    pii_det = get_pii_classifier().classify_value(s_val)
+                except Exception:
+                    pii_det = None
+
+                if pii_det:
+                    detected_pii.append({"column": col, "type": pii_det.subtype, "sample": pii_det.masked_value})
+                elif "ssn" in col_lower or SSN_REGEX.match(s_val):
                     detected_pii.append({"column": col, "type": "SSN", "sample": "***-**-****"})
                 elif "card" in col_lower or CC_REGEX.match(s_val):
                     detected_pii.append({"column": col, "type": "CREDIT_CARD", "sample": "****-****-****-****"})

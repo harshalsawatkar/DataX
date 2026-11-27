@@ -126,7 +126,156 @@ def test_database_connection(req: StoreCredentialRequest) -> Dict[str, Any]:
                 "message": f"Successfully connected to PostgreSQL! Discovered {len(tables)} tables via connection pool."
             }
 
+        elif engine in ["mysql", "mariadb"]:
+            if req.host in ("demo-sandbox", "sandbox.datax.internal") or req.database == "demo_sandbox":
+                latency = int((time.time() - start_t) * 1000)
+                demo_tables = ["orders", "order_items", "customers", "inventory", "vendor_master"]
+                return {
+                    "success": True,
+                    "engine": "mysql",
+                    "latencyMs": latency,
+                    "database": "demo_sandbox",
+                    "tables": demo_tables,
+                    "tableCount": len(demo_tables),
+                    "demo_mode": True,
+                    "message": "Connected to DataX MySQL Enterprise Demo Sandbox."
+                }
+            try:
+                import pymysql
+                host = req.host or "127.0.0.1"
+                port = int(req.port or 3306)
+                user = req.user or "root"
+                password = req.password or ""
+                database = req.database or None
+                conn = pymysql.connect(
+                    host=host,
+                    port=port,
+                    user=user,
+                    password=password,
+                    database=database,
+                    connect_timeout=3
+                )
+                with conn.cursor() as cur:
+                    cur.execute("SHOW TABLES;")
+                    tables = [r[0] for r in cur.fetchall()]
+                conn.close()
+                latency = int((time.time() - start_t) * 1000)
+                return {
+                    "success": True,
+                    "engine": "mysql",
+                    "latencyMs": latency,
+                    "database": database or "default",
+                    "tables": tables,
+                    "tableCount": len(tables),
+                    "message": f"Successfully connected to MySQL at {host}:{port}! Discovered {len(tables)} tables."
+                }
+            except Exception as me:
+                return {
+                    "success": False,
+                    "engine": engine,
+                    "latencyMs": int((time.time() - start_t) * 1000),
+                    "error": str(me),
+                    "message": f"MySQL connection failed: {str(me)}"
+                }
+
+        elif engine in ["snowflake"]:
+            if req.host in ("demo-sandbox", "sandbox.datax.internal") or req.database == "demo_sandbox":
+                latency = int((time.time() - start_t) * 1000)
+                demo_tables = ["RAW_ORDERS", "RAW_CUSTOMERS", "DIM_PRODUCTS", "FACT_SALES"]
+                return {
+                    "success": True,
+                    "engine": "snowflake",
+                    "latencyMs": latency,
+                    "database": "DEMO_SANDBOX",
+                    "tables": demo_tables,
+                    "tableCount": len(demo_tables),
+                    "demo_mode": True,
+                    "message": "Connected to DataX Snowflake Demo Sandbox."
+                }
+            try:
+                import snowflake.connector
+                conn = snowflake.connector.connect(
+                    user=req.user or "",
+                    password=req.password or "",
+                    account=req.host or "",
+                    database=req.database or "",
+                    login_timeout=4
+                )
+                cur = conn.cursor()
+                cur.execute("SHOW TABLES;")
+                tables = [r[1] for r in cur.fetchall()]
+                conn.close()
+                latency = int((time.time() - start_t) * 1000)
+                return {
+                    "success": True,
+                    "engine": "snowflake",
+                    "latencyMs": latency,
+                    "database": req.database or "SNOWFLAKE",
+                    "tables": tables,
+                    "tableCount": len(tables),
+                    "message": f"Successfully connected to Snowflake! Discovered {len(tables)} tables."
+                }
+            except Exception as sfe:
+                return {
+                    "success": False,
+                    "engine": "snowflake",
+                    "latencyMs": int((time.time() - start_t) * 1000),
+                    "error": str(sfe),
+                    "message": f"Snowflake connection failed: {str(sfe)}"
+                }
+
+        elif engine in ["sqlserver", "mssql"]:
+            try:
+                import pyodbc
+                conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={req.host},{req.port or 1433};DATABASE={req.database or 'master'};UID={req.user or ''};PWD={req.password or ''}"
+                conn = pyodbc.connect(conn_str, timeout=3)
+                cur = conn.cursor()
+                cur.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'")
+                tables = [r[0] for r in cur.fetchall()]
+                conn.close()
+                latency = int((time.time() - start_t) * 1000)
+                return {
+                    "success": True,
+                    "engine": "sqlserver",
+                    "latencyMs": latency,
+                    "database": req.database or "master",
+                    "tables": tables,
+                    "tableCount": len(tables),
+                    "message": f"Successfully connected to SQL Server! Discovered {len(tables)} tables."
+                }
+            except Exception as ms_err:
+                return {
+                    "success": False,
+                    "engine": "sqlserver",
+                    "latencyMs": int((time.time() - start_t) * 1000),
+                    "error": str(ms_err),
+                    "message": f"SQL Server connection failed: {str(ms_err)}"
+                }
+
         elif engine in ["sap_bw", "s4_hana", "sap"]:
+            if req.host in ("demo-sandbox", "sandbox.datax.internal") or req.database == "demo_sandbox":
+                latency = int((time.time() - start_t) * 1000)
+                table_details = [
+                    {"name": "0PUR_C01", "rows": "1,420 rows", "rowCount": 1420},
+                    {"name": "0IC_C03", "rows": "8,450 rows", "rowCount": 8450},
+                    {"name": "BAPI_PO_CREATE1", "rows": "1,200 rows", "rowCount": 1200},
+                    {"name": "MARA", "rows": "3,120 rows", "rowCount": 3120},
+                    {"name": "EKKO", "rows": "640 rows", "rowCount": 640},
+                    {"name": "EKPO", "rows": "2,180 rows", "rowCount": 2180}
+                ]
+                tables = [t["name"] for t in table_details]
+                return {
+                    "success": True,
+                    "engine": engine,
+                    "latencyMs": latency,
+                    "database": "SAP_DEMO_SANDBOX",
+                    "tables": tables,
+                    "tableDetails": table_details,
+                    "tableCount": len(tables),
+                    "demo_mode": True,
+                    "message": "Connected to SAP S/4HANA Enterprise Demo Sandbox."
+                }
+
             target_host = req.host or ""
             target_port = int(req.port or 443)
             if not target_host and uri:
@@ -138,63 +287,70 @@ def test_database_connection(req: StoreCredentialRequest) -> Dict[str, Any]:
                     "success": False,
                     "engine": engine,
                     "latencyMs": 0,
-                    "error": "Missing SAP HANA host. Please provide your HANA Cloud endpoint or paste BTP Service Key.",
+                    "error": "Missing SAP HANA host. Please provide your HANA Cloud endpoint or select Demo Sandbox.",
                     "message": "Connection verification failed: Host endpoint is required."
                 }
 
-            ping_msg = "verified"
             try:
-                sock = socket.create_connection((target_host, target_port), timeout=4)
+                # Real TCP connectivity test
+                sock = socket.create_connection((target_host, target_port), timeout=3)
                 sock.close()
+                # Check for hdbcli authentication if credentials supplied
+                try:
+                    from hdbcli import dbapi
+                    hdb_conn = dbapi.connect(
+                        address=target_host,
+                        port=target_port,
+                        user=req.user or "",
+                        password=req.password or "",
+                        timeout=3
+                    )
+                    cur = hdb_conn.cursor()
+                    cur.execute("SELECT TABLE_NAME FROM SYS.TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA")
+                    tables = [r[0] for r in cur.fetchall()]
+                    hdb_conn.close()
+                    latency = int((time.time() - start_t) * 1000)
+                    return {
+                        "success": True,
+                        "engine": engine,
+                        "latencyMs": latency,
+                        "database": req.database or "HANA",
+                        "tables": tables,
+                        "tableCount": len(tables),
+                        "message": f"Successfully authenticated to SAP HANA ({target_host}:{target_port})! Discovered {len(tables)} tables."
+                    }
+                except ImportError:
+                    return {
+                        "success": False,
+                        "engine": engine,
+                        "latencyMs": int((time.time() - start_t) * 1000),
+                        "error": "SAP HANA native client (hdbcli) is not installed on this host.",
+                        "message": f"Network port {target_port} reachable, but SAP native driver (hdbcli) is missing for authentication."
+                    }
+                except Exception as he:
+                    return {
+                        "success": False,
+                        "engine": engine,
+                        "latencyMs": int((time.time() - start_t) * 1000),
+                        "error": str(he),
+                        "message": f"SAP HANA authentication failed at {target_host}:{target_port}: {str(he)}"
+                    }
             except Exception as se:
                 return {
                     "success": False,
                     "engine": engine,
                     "latencyMs": int((time.time() - start_t) * 1000),
                     "error": str(se),
-                    "message": f"Cannot reach SAP HANA Cloud at {target_host}:{target_port} ({str(se)}). Verify instance is RUNNING in BTP."
+                    "message": f"Cannot reach SAP HANA Cloud at {target_host}:{target_port} ({str(se)}). Verify instance is online."
                 }
 
-            table_details = [
-                {"name": "0PUR_C01", "rows": "1,420 rows"},
-                {"name": "0IC_C03", "rows": "8,450 rows"},
-                {"name": "BAPI_PO_CREATE1", "rows": "1,200 rows"},
-                {"name": "MARA", "rows": "3,120 rows"},
-                {"name": "EKKO", "rows": "640 rows"},
-                {"name": "EKPO", "rows": "2,180 rows"}
-            ]
-            tables = [t["name"] for t in table_details]
-            latency = int((time.time() - start_t) * 1000)
-            return {
-                "success": True,
-                "engine": engine,
-                "latencyMs": latency,
-                "database": req.database or "DATAX_STAGING",
-                "tables": tables,
-                "tableDetails": table_details,
-                "tableCount": len(tables),
-                "message": f"Connected to SAP HANA Cloud ({target_host}:{target_port}) in {latency}ms! Handshake {ping_msg}."
-            }
-
         else:
-            latency = int((time.time() - start_t) * 1000)
-            table_details = [
-                {"name": "0PUR_C01", "rows": "1,420 rows", "rowCount": 1420},
-                {"name": "0IC_C03", "rows": "8,450 rows", "rowCount": 8450},
-                {"name": "BAPI_PO_CREATE1", "rows": "1,200 rows", "rowCount": 1200},
-                {"name": "MARA", "rows": "3,120 rows", "rowCount": 3120},
-                {"name": "EKKO", "rows": "640 rows", "rowCount": 640},
-                {"name": "EKPO", "rows": "2,180 rows", "rowCount": 2180}
-            ]
-            tables = [t["name"] for t in table_details]
             return {
-                "success": True,
+                "success": False,
                 "engine": engine,
-                "latencyMs": latency,
-                "tables": tables,
-                "tableDetails": table_details,
-                "tableCount": len(tables),
-                "message": f"Connection parameters for {engine.upper()} verified. Discovered {len(tables)} tables."
+                "latencyMs": int((time.time() - start_t) * 1000),
+                "error": f"Unsupported or unconfigured database engine: '{engine}'.",
+                "message": f"Live connection verification for '{engine.upper()}' requires active driver and valid connection credentials."
             }
 
     except Exception as e:

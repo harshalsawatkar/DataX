@@ -282,6 +282,22 @@ def scan_single_chunk(
         if ph_matches:
             sanitized_text = PHONE_REGEX.sub("[REDACTED_PHONE]", sanitized_text)
 
+    # 3b. Indian DPDP PII Scanner (Aadhaar, PAN, GSTIN, UPI)
+    try:
+        try:
+            from core.pii_classifier import get_pii_classifier
+        except ImportError:
+            from pii_classifier import get_pii_classifier
+        clf = get_pii_classifier()
+        ind_matches = clf.scan_text(sanitized_text)
+        for d in sorted(ind_matches, key=lambda x: x.start, reverse=True):
+            if d.subtype in ("AADHAAR", "PAN", "GSTIN", "UPI_VPA"):
+                redactions.append({"type": d.subtype, "original": d.masked_value, "replacement": f"[REDACTED_{d.subtype}]"})
+                violations.append(f"DPDP 2025 Identifier Detected ({d.subtype})")
+                sanitized_text = sanitized_text[:d.start] + f"[REDACTED_{d.subtype}]" + sanitized_text[d.end:]
+    except Exception:
+        pass
+
     # 4. User Custom Forbidden Terms / Regexes
     for term in custom_terms:
         try:

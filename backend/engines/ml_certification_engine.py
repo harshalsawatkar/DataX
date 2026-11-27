@@ -736,6 +736,20 @@ def _sanitize_sft_text(
         if CREDIT_CARD_REGEX.search(out):
             out = CREDIT_CARD_REGEX.sub("[REDACTED_CARD]", out)
             tags.append("PII:PAYMENT_CARD")
+
+        # Indian DPDP PII Scanner
+        try:
+            try:
+                from core.pii_classifier import get_pii_classifier
+            except ImportError:
+                from pii_classifier import get_pii_classifier
+            clf = get_pii_classifier()
+            for d in clf.scan_text(out):
+                if d.subtype in ("AADHAAR", "PAN", "GSTIN"):
+                    out = out.replace(d.raw_value, f"[REDACTED_{d.subtype}]")
+                    tags.append(f"PII:{d.subtype}")
+        except Exception:
+            pass
     if redact_emails_phones:
         if EMAIL_REGEX.search(out):
             out = EMAIL_REGEX.sub("[REDACTED_EMAIL]", out)

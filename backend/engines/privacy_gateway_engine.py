@@ -33,6 +33,25 @@ from ai_firewall_engine import (
     calculate_shannon_entropy
 )
 
+try:
+    from core.pii_classifier import (
+        get_pii_classifier,
+        generate_verhoeff_check_digit,
+        GSTIN_CHARS,
+        is_valid_aadhaar,
+        is_valid_pan,
+        is_valid_gstin,
+    )
+except ImportError:
+    from pii_classifier import (
+        get_pii_classifier,
+        generate_verhoeff_check_digit,
+        GSTIN_CHARS,
+        is_valid_aadhaar,
+        is_valid_pan,
+        is_valid_gstin,
+    )
+
 # -----------------------------------------------------------------------------
 # Luhn Algorithm for Credit Card Validation
 # -----------------------------------------------------------------------------
@@ -111,6 +130,56 @@ def generate_synthetic_phone(original_phone: str, seed: str) -> str:
     return f"+1-555-01{fictional_suffix}"
 
 
+def generate_synthetic_aadhaar(original_aadhaar: str, seed: str) -> str:
+    """Generates a synthetic 12-digit Indian Aadhaar passing Verhoeff D5 checksum."""
+    h = hashlib.sha256(f"{seed}:aadhaar:{original_aadhaar}".encode("utf-8")).hexdigest()
+    first_digit = (int(h[0], 16) % 8) + 2
+    remaining_10 = f"{int(h[1:13], 16) % 10000000000:010d}"
+    base_11 = f"{first_digit}{remaining_10}"
+    check = generate_verhoeff_check_digit(base_11)
+    clean_synth = f"{base_11}{check}"
+    if " " in original_aadhaar:
+        return f"{clean_synth[:4]} {clean_synth[4:8]} {clean_synth[8:]}"
+    elif "-" in original_aadhaar:
+        return f"{clean_synth[:4]}-{clean_synth[4:8]}-{clean_synth[8:]}"
+    return clean_synth
+
+
+def generate_synthetic_pan(original_pan: str, seed: str) -> str:
+    """Generates a synthetic 10-char PAN preserving 4th status char and 5th surname initial."""
+    h = hashlib.sha256(f"{seed}:pan:{original_pan}".encode("utf-8")).hexdigest()
+    clean = original_pan.strip().upper()
+    c1 = chr(ord('A') + (int(h[0:2], 16) % 26))
+    c2 = chr(ord('A') + (int(h[2:4], 16) % 26))
+    c3 = chr(ord('A') + (int(h[4:6], 16) % 26))
+    status_char = clean[3] if len(clean) >= 4 and clean[3] in "ABCFGHLJPT" else "P"
+    initial_char = clean[4] if len(clean) >= 5 and clean[4].isalpha() else "X"
+    digits = f"{int(h[6:10], 16) % 9000 + 1000:04d}"
+    last_char = chr(ord('A') + (int(h[10:12], 16) % 26))
+    return f"{c1}{c2}{c3}{status_char}{initial_char}{digits}{last_char}"
+
+
+def generate_synthetic_gstin(original_gstin: str, seed: str) -> str:
+    """Generates a synthetic 15-char GSTIN preserving state code with valid Modulo-36 check."""
+    clean = original_gstin.strip().upper()
+    state = clean[:2] if len(clean) >= 2 and clean[:2].isdigit() else "29"
+    pan_part = clean[2:12] if len(clean) >= 12 else "ABCPE1234F"
+    synth_pan = generate_synthetic_pan(pan_part, seed)
+    entity_code = clean[12] if len(clean) >= 13 and clean[12].isalnum() else "1"
+    base_14 = f"{state}{synth_pan}{entity_code}Z"
+
+    total = 0
+    for i in range(14):
+        char = base_14[i]
+        val = GSTIN_CHARS.index(char)
+        factor = 1 if (i % 2 == 0) else 2
+        product = val * factor
+        total += (product // 36) + (product % 36)
+
+    check_char = GSTIN_CHARS[(36 - (total % 36)) % 36]
+    return f"{base_14}{check_char}"
+
+
 # -----------------------------------------------------------------------------
 # Reversible Token Vault (Task 9 & Task 28: AES-GCM Encrypted Local In-Memory Vault)
 # -----------------------------------------------------------------------------
@@ -166,7 +235,7 @@ class TokenVault:
                 return sess["reverse"][rev_key]
 
             if mode == "FORMAT_PRESERVING":
-                if entity_type == "CARD":
+                if entity_type in ("CARD", "CREDIT_CARD"):
                     synth = generate_synthetic_luhn_card(raw_value, session_id)
                 elif entity_type == "SSN":
                     synth = generate_synthetic_ssn(raw_value, session_id)
@@ -174,6 +243,12 @@ class TokenVault:
                     synth = generate_synthetic_email(raw_value, session_id)
                 elif entity_type == "PHONE":
                     synth = generate_synthetic_phone(raw_value, session_id)
+                elif entity_type == "AADHAAR":
+                    synth = generate_synthetic_aadhaar(raw_value, session_id)
+                elif entity_type == "PAN":
+                    synth = generate_synthetic_pan(raw_value, session_id)
+                elif entity_type == "GSTIN":
+                    synth = generate_synthetic_gstin(raw_value, session_id)
                 else:
                     count = sess["counter"].get(entity_type, 0) + 1
                     sess["counter"][entity_type] = count
@@ -437,6 +512,21 @@ def anonymize_text(
             elif act == "TOKENIZE":
                 token = tv.tokenize_entity(session_id, "PHONE", raw_phone, mode=mode)
                 sanitized = sanitized[:m.start()] + token + sanitized[m.end():]
+
+    # 7. Indian DPDP PII Scanner (Aadhaar, PAN, GSTIN, UPI)
+    pii_clf = get_pii_classifier()
+    indian_detections = pii_clf.scan_text(sanitized)
+    for d in sorted(indian_detections, key=lambda x: x.start, reverse=True):
+        if d.subtype in ("AADHAAR", "PAN", "GSTIN", "UPI_VPA"):
+            act = pol.get("action_indian_pii", "TOKENIZE")
+            detected_entities.append({"type": d.entity_type, "subtype": d.subtype, "action": act})
+            if act == "BLOCK":
+                raise SecurityViolationException(f"PII_{d.subtype}", f"Blocked {d.subtype} in prompt.", risk_score=8.5)
+            elif act == "MASK":
+                sanitized = sanitized[:d.start] + d.masked_value + sanitized[d.end:]
+            elif act == "TOKENIZE":
+                token = tv.tokenize_entity(session_id, d.subtype, d.raw_value, mode=mode)
+                sanitized = sanitized[:d.start] + token + sanitized[d.end:]
 
     return sanitized, detected_entities
 
