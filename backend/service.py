@@ -519,11 +519,41 @@ def api_optimize_indexes(targetUri: Optional[str] = None, user: Dict[str, Any] =
 
 
 @app.get("/governance/audit/verify")
-def api_verify_audit_immutability(user: Dict[str, Any] = Depends(get_current_user)):
-    """ARC-04: Cryptographic Merkle Hash Chain Audit Verification."""
-    from governance import audit_chain
-    report = audit_chain.verify_integrity()
+def api_verify_audit_immutability(tenant_id: str = "tenant_enterprise", user: Dict[str, Any] = Depends(get_current_user)):
+    """ARC-04 / S1-14: Cryptographic Merkle Hash Chain Audit Verification across DB_ERP, MIGRATION, ML_GATE, AI_FIREWALL."""
+    from governance.unified_audit_ledger import verify_unified_ledger
+    report = verify_unified_ledger(tenant_id=tenant_id)
     return {"status": "success", "immutability_report": report}
+
+
+@app.get("/governance/audit/events")
+def api_get_audit_events(tenant_id: str = "tenant_enterprise", limit: int = 50, module: Optional[str] = None, user: Dict[str, Any] = Depends(get_current_user)):
+    """ARC-04 / S1-14: Retrieves recent Merkle-chained audit ledger events."""
+    from governance.unified_audit_ledger import get_unified_audit_events
+    events = get_unified_audit_events(tenant_id=tenant_id, limit=limit, module=module)
+    return {"status": "success", "events": events, "count": len(events)}
+
+
+@app.post("/governance/audit/record")
+def api_record_audit_event(payload: Dict[str, Any] = Body(...), user: Dict[str, Any] = Depends(get_current_user)):
+    """ARC-04 / S1-14: Appends a tamper-evident event to the Unified Audit Ledger."""
+    from governance.unified_audit_ledger import append_unified_audit_event
+    module = payload.get("module", "DB_ERP")
+    action = payload.get("action", "UNSPECIFIED_ACTION")
+    actor = user.get("username", user.get("email", "system")) if isinstance(user, dict) else "system"
+    event_payload = payload.get("payload", {})
+    tenant_id = payload.get("tenant_id", "tenant_enterprise")
+    metadata = payload.get("metadata", {})
+
+    event = append_unified_audit_event(
+        module=module,
+        action=action,
+        actor=actor,
+        payload=event_payload,
+        tenant_id=tenant_id,
+        metadata=metadata
+    )
+    return {"status": "success", "event": event}
 
 
 @app.post("/governance/retention/run")

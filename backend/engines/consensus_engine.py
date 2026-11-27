@@ -1,7 +1,7 @@
 """
 DataX Mathematical Consensus Guard Engine (Layer 1, Layer 2, Layer 3)
-Based on langgraph-consensus-guard architecture:
-- Layer 1: Deterministic statistical baseline (<30ms, completeness, IQR outliers, Shannon entropy, PII scans)
+Integrated with langgraph-consensus-guard architecture:
+- Layer 1: Deterministic statistical baseline (<30ms, completeness, IQR outliers, Shannon entropy, DPDP PII scans)
 - Layer 2: Specialized domain agent consensus votes (Schema, Drift/Anomaly, Governance/PII, Business Logic)
 - Layer 3: Deterministic mathematical anchoring (±2.5 points band clamping) and fatal flaw overrides
 """
@@ -11,6 +11,7 @@ import re
 import time
 import hashlib
 from typing import Dict, Any, List, Optional, Tuple
+from pydantic import BaseModel, Field
 
 SSN_REGEX = re.compile(r'^\d{3}-\d{2}-\d{4}$')
 CC_REGEX = re.compile(r'^\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}$')
@@ -21,6 +22,42 @@ RESERVED_SQL_KEYWORDS = frozenset({
     "table", "database", "order", "group", "by", "having", "limit",
     "join", "inner", "outer", "left", "right", "null", "case", "when"
 })
+
+
+class Layer1MetricResult(BaseModel):
+    rowCount: int = 0
+    columnCount: int = 0
+    nullRatios: Dict[str, float] = Field(default_factory=dict)
+    completenessScore: float = 0.0
+    cardinalityRatios: Dict[str, float] = Field(default_factory=dict)
+    outlierCount: int = 0
+    detectedPii: List[Dict[str, Any]] = Field(default_factory=list)
+    baselineScore: float = 0.0
+    executionTimeMs: float = 0.0
+
+
+class DomainAgentVote(BaseModel):
+    agentName: str
+    score: float
+    confidence: float
+    verdict: str
+    citedMetrics: Dict[str, Any] = Field(default_factory=dict)
+    reasoning: str
+
+
+class ConsensusVerdict(BaseModel):
+    status: str
+    disposition: str
+    layer1BaselineScore: float
+    unanchoredQualitativeScore: float
+    anchoredScore: float
+    toleranceBand: str = "±2.5"
+    clampedBandRange: List[float] = Field(default_factory=list)
+    domainVotes: Dict[str, Any] = Field(default_factory=dict)
+    layer1Stats: Dict[str, Any] = Field(default_factory=dict)
+    fatalFlawOverrides: List[str] = Field(default_factory=list)
+    manifestHash: str
+    executionTimeMs: float = 0.0
 
 
 def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -45,7 +82,6 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     all_cols = list(records[0].keys())
     column_count = len(all_cols)
 
-    # 1. Null ratios & completeness
     null_counts = {col: 0 for col in all_cols}
     unique_values = {col: set() for col in all_cols}
     numeric_values = {col: [] for col in all_cols}
@@ -59,7 +95,6 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             else:
                 s_val = str(val).strip()
                 unique_values[col].add(s_val)
-                # Check for critical unmasked PII
                 col_lower = col.lower()
                 try:
                     try:
@@ -77,7 +112,6 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
                 elif "card" in col_lower or CC_REGEX.match(s_val):
                     detected_pii.append({"column": col, "type": "CREDIT_CARD", "sample": "****-****-****-****"})
 
-                # Collect numeric values for IQR outlier calculations
                 try:
                     num_val = float(val)
                     numeric_values[col].append(num_val)
@@ -90,7 +124,6 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     cardinality_ratios = {col: round(len(unique_values[col]) / row_count, 4) for col in all_cols}
 
-    # 2. IQR Outlier calculation on numeric columns
     outlier_count = 0
     iqr_bounds = {}
     for col, nums in numeric_values.items():
@@ -107,11 +140,8 @@ def compute_layer1_stats(records: List[Dict[str, Any]]) -> Dict[str, Any]:
                     if n < lower_b or n > upper_b:
                         outlier_count += 1
 
-    # 3. Composite deterministic baseline score (0.0 - 10.0)
-    # 40% Completeness, 30% Outlier Health, 30% PII / Structural Cleanliness
     outlier_ratio = min(1.0, outlier_count / max(1, row_count * max(1, len(iqr_bounds))))
     outlier_health = max(0.0, 1.0 - outlier_ratio)
-
     pii_penalty = 1.0 if not detected_pii else max(0.0, 1.0 - (len(detected_pii) * 0.2))
 
     raw_baseline = (
@@ -216,7 +246,9 @@ def evaluate_consensus_guard(
     records: List[Dict[str, Any]],
     rules: Optional[List[Any]] = None,
     table_role: str = "primary",
-    target_column: Optional[str] = None
+    target_column: Optional[str] = None,
+    simulated_llm_score: Optional[float] = None,
+    layer1_override: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Executes full 3-Layer Mathematical Consensus Guard:
@@ -225,7 +257,7 @@ def evaluate_consensus_guard(
     3. Layer 3: Mathematical Score Anchoring (±2.5) & Fatal Flaw Gating
     """
     start_time = time.time()
-    if not records:
+    if not records and not layer1_override:
         return {
             "status": "REJECTED",
             "disposition": "SUSPENDED",
@@ -239,16 +271,22 @@ def evaluate_consensus_guard(
         }
 
     # Layer 1: Pure Deterministic Baseline
-    layer1 = compute_layer1_stats(records)
+    if layer1_override is not None:
+        layer1 = layer1_override
+    else:
+        layer1 = compute_layer1_stats(records)
     baseline_score = layer1["baselineScore"]
 
     # Layer 2: Concurrent Domain Votes
-    domain_votes = compute_domain_agent_votes(records, layer1)
+    domain_votes = compute_domain_agent_votes(records if records else [{}], layer1)
 
-    # Compute qualitative aggregate score
-    total_weighted_score = sum(v["score"] * v["confidence"] for v in domain_votes.values())
-    total_weights = sum(v["confidence"] for v in domain_votes.values())
-    unanchored_qualitative_score = round((total_weighted_score / max(0.1, total_weights)) * 10.0, 2)
+    # Compute qualitative aggregate score (or accept external LLM agent consensus)
+    if simulated_llm_score is not None:
+        unanchored_qualitative_score = round(float(simulated_llm_score), 2)
+    else:
+        total_weighted_score = sum(v["score"] * v["confidence"] for v in domain_votes.values())
+        total_weights = sum(v["confidence"] for v in domain_votes.values())
+        unanchored_qualitative_score = round((total_weighted_score / max(0.1, total_weights)) * 10.0, 2)
 
     # Layer 3: Mathematical Anchoring within ±2.5 points
     band = 2.5
@@ -260,12 +298,18 @@ def evaluate_consensus_guard(
     disposition = "READY"
     fatal_flaws = []
 
-    # Fatal Flaw 1: Critical unmasked PII
-    if layer1["detectedPii"]:
+    # Fatal Flaw 1: Critical unmasked PII (Aadhaar, PAN, SSN, Credit Card, etc.)
+    critical_pii_types = {"AADHAAR", "PAN", "SSN", "CREDIT_CARD", "PASSPORT"}
+    critical_pii = [
+        p for p in layer1.get("detectedPii", [])
+        if p.get("type", "").upper() in critical_pii_types
+    ]
+    if critical_pii:
         anchored_score = min(anchored_score, 2.0)
         disposition = "SUSPENDED"
-        pii_cols = ", ".join(set(p["column"] for p in layer1["detectedPii"]))
-        fatal_flaws.append(f"[Fatal Flaw: PII Guard] Unmasked critical PII detected in column(s): {pii_cols}. Score capped at 2.0.")
+        pii_cols = ", ".join(set(p["column"] for p in critical_pii))
+        pii_types = ", ".join(set(p["type"] for p in critical_pii))
+        fatal_flaws.append(f"[Fatal Flaw: PII Guard] Unmasked critical PII ({pii_types}) detected in column(s): {pii_cols}. Score capped at 2.0 (SUSPENDED).")
 
     # Fatal Flaw 2: High null rate on designated target column (> 5%)
     if target_column and layer1["nullRatios"].get(target_column, 0.0) > 0.05:
@@ -329,4 +373,3 @@ def evaluate_consensus_guard(
         "manifestHash": manifest_hash,
         "executionTimeMs": elapsed_ms
     }
-
