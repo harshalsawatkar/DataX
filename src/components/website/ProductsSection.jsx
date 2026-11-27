@@ -24,7 +24,7 @@ const FACT_CARDS = [
     desc: 'Domain templates, ready to load',
     barColor: '#D4FF3A',
     valueColor: '#D4FF3A',
-    descColor: '#C2C7D6',
+    descColor: '#FFFFFF',
     bg: 'linear-gradient(180deg, #121C45 0%, #0A0F1F 100%)',
     defaultBorder: '1px solid rgba(255, 255, 255, 0.10)',
     hoverBorder: '1.5px solid #2D55F5',
@@ -32,7 +32,7 @@ const FACT_CARDS = [
     hoverShadow: '0 24px 48px -10px rgba(45, 85, 245, 0.32), 0 8px 20px rgba(10, 15, 31, 0.35)',
     iconBg: 'rgba(255, 255, 255, 0.08)',
     iconColor: '#D4FF3A',
-    tagColor: '#8A92A6',
+    tagColor: '#A6ADC2',
     icon: Layers,
   },
   {
@@ -50,7 +50,7 @@ const FACT_CARDS = [
     hoverShadow: '0 18px 40px -10px rgba(45, 85, 245, 0.22), 0 6px 16px rgba(10, 15, 31, 0.08)',
     iconBg: '#ECF0FF',
     iconColor: '#2D55F5',
-    tagColor: '#64748B',
+    tagColor: '#5F6678',
     icon: Box,
   },
   {
@@ -66,9 +66,9 @@ const FACT_CARDS = [
     hoverBorder: '1.5px solid #2D55F5',
     defaultShadow: '0 8px 24px -6px rgba(45, 85, 245, 0.10)',
     hoverShadow: '0 18px 40px -10px rgba(45, 85, 245, 0.24), 0 6px 16px rgba(10, 15, 31, 0.08)',
-    iconBg: '#ECF0FF',
+    iconBg: '#FFFFFF',
     iconColor: '#2D55F5',
-    tagColor: '#64748B',
+    tagColor: '#5F6678',
     icon: Shield,
   },
   {
@@ -76,7 +76,7 @@ const FACT_CARDS = [
     tag: 'ROWS WRITTEN',
     value: '0',
     desc: 'Rows written to a target during a test',
-    barColor: '#E2E8F0',
+    barColor: '#2D55F5',
     valueColor: '#0A0F1F',
     descColor: '#0A0F1F',
     bg: '#FFFFFF',
@@ -84,9 +84,9 @@ const FACT_CARDS = [
     hoverBorder: '1.5px solid #2D55F5',
     defaultShadow: '0 8px 24px -6px rgba(10, 15, 31, 0.06)',
     hoverShadow: '0 18px 40px -10px rgba(45, 85, 245, 0.22), 0 6px 16px rgba(10, 15, 31, 0.08)',
-    iconBg: '#F1F5F9',
-    iconColor: '#64748B',
-    tagColor: '#64748B',
+    iconBg: '#ECF0FF',
+    iconColor: '#2D55F5',
+    tagColor: '#5F6678',
     icon: Lock,
   },
 ];
@@ -112,7 +112,7 @@ export default function ProductsSection() {
         id="products"
         style={{
           position: 'relative',
-          background: '#0A0F1F',
+          background: 'linear-gradient(to bottom, #0A0F1F 0 calc(100% - min(330px, 36%)), var(--landing-surface) calc(100% - min(330px, 36%)))',
           paddingTop: 30,
           paddingBottom: 90,
           overflow: 'hidden',
@@ -163,21 +163,16 @@ export default function ProductsSection() {
         id="facts"
         style={{
           position: 'relative',
-          background: '#FFFFFF',
+          background: 'var(--landing-surface)',
           paddingTop: 88,
           paddingBottom: 96,
           fontFamily: "'Geist', sans-serif",
         }}
       >
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
+        <div style={{ maxWidth: 1248, margin: '0 auto', padding: '0 24px' }}>
           {/* ── 4 Facts Cards with Ease-Out 280ms Hover & Blue Border ── */}
           <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 20,
-              marginBottom: 32,
-            }}
+            className="mb-14 grid gap-5 min-[480px]:grid-cols-2 lg:grid-cols-4"
           >
             {FACT_CARDS.map((card) => {
               const Icon = card.icon;
@@ -190,12 +185,11 @@ export default function ProductsSection() {
                   onMouseLeave={() => setHoveredCard(null)}
                   style={{
                     background: card.bg,
-                    borderRadius: 20,
-                    padding: '28px 24px',
+                    borderRadius: 24,
+                    padding: '24px 24px 26px',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    minHeight: 285,
+                    minHeight: 272,
                     border: isHovered ? card.hoverBorder : card.defaultBorder,
                     boxShadow: isHovered ? card.hoverShadow : card.defaultShadow,
                     transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
@@ -205,20 +199,20 @@ export default function ProductsSection() {
                     boxSizing: 'border-box',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: card.tagColor, textTransform: 'uppercase' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0, lineHeight: 1.3, color: card.tagColor, textTransform: 'uppercase' }}>
                       {card.tag}
                     </span>
-                    <div style={{ width: 36, height: 36, borderRadius: 12, background: card.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 12, background: card.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Icon size={18} color={card.iconColor} />
                     </div>
                   </div>
-                  <div>
+                  <div style={{ marginTop: 28 }}>
                     <div style={{ fontSize: 88, fontWeight: 600, lineHeight: '92%', color: card.valueColor, letterSpacing: '-0.05em' }}>
                       {card.value}
                     </div>
                     {/* Accent bar: 32×3px, radius 2px */}
-                    <div style={{ width: 32, height: 3, borderRadius: 2, background: card.barColor, marginTop: 8, marginBottom: 16 }} />
+                    <div style={{ width: 32, height: 3, borderRadius: 2, background: card.barColor, marginTop: 14, marginBottom: 14 }} />
                     <p style={{ margin: 0, fontSize: 15, lineHeight: '145%', color: card.descColor, fontWeight: 500 }}>
                       {card.desc}
                     </p>
@@ -235,14 +229,14 @@ export default function ProductsSection() {
               flexWrap: 'nowrap',
               alignItems: 'center',
               width: '100%',
-              minHeight: 68,
+              minHeight: 70,
               padding: '12px 18px',
               background: '#FFFFFF',
               borderRadius: 20,
               border: '1px solid #E3E6EE',
               boxShadow: '0 8px 24px -6px rgba(10, 15, 31, 0.05)',
               boxSizing: 'border-box',
-              overflow: 'hidden',
+              overflowX: 'auto',
               gap: 16,
             }}
           >

@@ -279,6 +279,52 @@ html.dark .text-\[\#D4FF3A\]:not(.landing-volt) {
 }
 
 /* ── Landing Page Figma Design Tokens ─────────────────────── */
+:root {
+  --landing-surface: #F5F6FA;
+}
+
+.landing-nav {
+  background: rgba(22, 28, 48, 0.72);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 32px rgba(10, 15, 31, 0.45);
+}
+
+.landing-demo-button,
+.landing-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 150ms;
+}
+
+.landing-demo-button {
+  padding: 9px 16px;
+  background-color: #2D55F5;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.landing-demo-button:hover {
+  background-color: #2449DA;
+}
+
+.landing-secondary-button {
+  padding: 9px 18px;
+  border: 1px solid #232B45;
+  background-color: #161C30;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.landing-secondary-button:hover {
+  background-color: #232B45;
+}
+
 /* Volt green #D4FF3A — landing page eyebrow + headline accent */
 .landing-volt-bg {
   background-color: #D4FF3A !important;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import step1Img from '../../assets/step1.png';
 import step2Img from '../../assets/step2.png';
 import step3Img from '../../assets/step3.png';
@@ -34,24 +34,23 @@ const STEPS = [
 ];
 
 export default function HowItWorksSection() {
-  const [hoveredStep, setHoveredStep] = useState(null);
 
   return (
     <section
       id="how-it-works"
       style={{
         position: 'relative',
-        background: '#FFFFFF',
-        paddingTop: 100,
-        paddingBottom: 110,
+        background: 'var(--landing-surface)',
+        paddingTop: 128,
+        paddingBottom: 128,
         overflow: 'hidden',
         fontFamily: "'Geist', sans-serif",
       }}
     >
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
+      <div style={{ maxWidth: 1248, margin: '0 auto', padding: '0 24px' }}>
 
         {/* ── Section Header ──────────────────────────────────── */}
-        <div style={{ maxWidth: 780, marginBottom: 56 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 16, maxWidth: 760, marginBottom: 64 }}>
           {/* Eyebrow: DX/eyebrow (Geist 600, 12px, 130% lh, #2D55F5) */}
           <div
             style={{
@@ -62,7 +61,6 @@ export default function HowItWorksSection() {
               letterSpacing: '0%',
               color: '#2D55F5',
               textTransform: 'uppercase',
-              marginBottom: 16,
             }}
           >
             HOW IT WORKS
@@ -71,7 +69,8 @@ export default function HowItWorksSection() {
           {/* Headline: Geist 600 SemiBold, 56px, 102% line-height, -3.5% letter spacing */}
           <h2
             style={{
-              margin: '0 0 16px 0',
+              margin: 0,
+              fontFamily: 'inherit',
               fontSize: 'clamp(36px, 4.5vw, 56px)',
               fontWeight: 600,
               lineHeight: '102%',
@@ -90,7 +89,7 @@ export default function HowItWorksSection() {
               fontWeight: 400,
               lineHeight: '155%',
               letterSpacing: '0%',
-              color: '#474F61',
+              color: '#474E61',
               maxWidth: 640,
             }}
           >
@@ -98,72 +97,24 @@ export default function HowItWorksSection() {
           </p>
         </div>
 
-        {/* ── 3 Steps in a single horizontal row with direct image hover (no outer box) ── */}
-        <div
-          style={{
-            position: 'relative',
-            display: 'grid',
-            gridTemplateColumns: '1fr auto 1fr auto 1fr',
-            alignItems: 'center',
-            gap: 16,
-            width: '100%',
-          }}
-        >
-          {STEPS.map((step, idx) => {
-            const isHovered = hoveredStep === step.id;
-
-            return (
-              <React.Fragment key={step.id}>
-                {/* Step Card — Render image directly without background / border wrapper */}
+        <div className="grid items-start gap-6 md:grid-cols-3">
+          {STEPS.map((step, index) => (
+            <div key={step.id} className="relative">
+              <img
+                src={step.img}
+                alt={step.alt}
+                className="-mb-[10%] -ml-[9.375%] -mt-[3.125%] block h-auto w-[118.75%] max-w-none rounded-3xl transition-transform duration-200 hover:-translate-y-1.5"
+              />
+              {index < STEPS.length - 1 && (
                 <div
-                  onMouseEnter={() => setHoveredStep(step.id)}
-                  onMouseLeave={() => setHoveredStep(null)}
-                  style={{
-                    position: 'relative',
-                    width: '100%',
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    transform: isHovered ? 'translateY(-6px)' : 'translateY(0)',
-                    transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                    zIndex: isHovered ? 10 : 1,
-                  }}
+                  aria-hidden="true"
+                  className="absolute left-[calc(100%+12px)] top-[min(8vw,110px)] z-10 hidden size-10 -translate-x-1/2 items-center justify-center rounded-full bg-[#2D55F5] shadow-[0_4px_12px_rgba(45,85,245,0.35)] md:flex"
                 >
-                  <img
-                    src={step.img}
-                    alt={step.alt}
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      display: 'block',
-                      borderRadius: 24,
-                    }}
-                  />
+                  <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.4} />
                 </div>
-
-                {/* Connecting blue arrow circle between Step 1-2 and Step 2-3 */}
-                {idx < STEPS.length - 1 && (
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: '50%',
-                      background: '#2D55F5',
-                      boxShadow: '0 4px 12px rgba(45, 85, 245, 0.35)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      zIndex: 5,
-                    }}
-                  >
-                    <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.4} />
-                  </div>
-                )}
-              </React.Fragment>
-            );
-          })}
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </section>

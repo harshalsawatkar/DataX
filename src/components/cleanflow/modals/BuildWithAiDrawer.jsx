@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
   X, 
@@ -22,6 +22,7 @@ import api from '../../../services/apiClient';
 
 export default function BuildWithAiDrawer({
   isOpen,
+  top = 0,
   onClose,
   onApplyToCanvas,
   onPreviewDraft,
@@ -37,22 +38,20 @@ export default function BuildWithAiDrawer({
   const [refinementText, setRefinementText] = useState('');
   const [editingSuggestionId, setEditingSuggestionId] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
-  const [analysisSteps, setAnalysisSteps] = useState([]);
-  const [isAnalysing, setIsAnalysing] = useState(false);
-
-  // Editable rules state within N5
-  const [ruleChecklist, setRuleChecklist] = useState([
-    { id: 'r1', name: 'Email syntax · RFC-5322', desc: 'Auto-fix common typos, quarantine the rest', badge: 'Your prompt', checked: true },
-    { id: 'r2', name: 'Phone format · E.164', desc: 'Auto-fix', badge: 'Your prompt', checked: true },
-    { id: 'r3', name: 'De-duplicate by email', desc: 'Keep the most recently updated record', badge: 'Your prompt', checked: true },
-    { id: 'r4', name: 'Name casing · Title Case', desc: 'In the pack, not in your prompt', badge: 'Pack only', checked: false }
-  ]);
+  const [draftEdges, setDraftEdges] = useState([]);
+  const [draftError, setDraftError] = useState('');
+  useEffect(() => {
+    if (isOpen) onPreviewDraft?.({ nodes: suggestions, edges: draftEdges });
+  }, [isOpen, suggestions, draftEdges, onPreviewDraft]);
+  const draftRequest = useRef(0);
+  const [ruleChecklist, setRuleChecklist] = useState([]);
   const [selectedModel, setSelectedModel] = useState('gpt-5-mini');
   const [onFailureAction, setOnFailureAction] = useState('Send to quarantine');
 
   const handleStartDraft = async () => {
+    const requestId = ++draftRequest.current;
+    setDraftError('');
     setStep('analysing');
-    setIsAnalysing(true);
 
     try {
       const res = await api.post('/workflow/ai-draft', {
@@ -63,22 +62,16 @@ export default function BuildWithAiDrawer({
         existingNodes
       });
 
-      if (res?.suggestions) {
-        setSuggestions(res.suggestions);
-        setAnalysisSteps(res.analysisSteps || []);
-        if (onPreviewDraft) {
-          onPreviewDraft(res.suggestions);
-        }
-      }
-    } catch (err) {
-      console.warn('Fallback to local draft synthesis:', err);
-    }
-
-    // Smooth step-through to show what AI is analysing matching N3
-    setTimeout(() => {
-      setIsAnalysing(false);
+      if (requestId !== draftRequest.current) return;
+      if (!res?.suggestions?.length) throw new Error('No suggestions returned');
+      setSuggestions(res.suggestions);
+      setDraftEdges(res.edges ?? []);
       setStep('review');
-    }, 1400);
+    } catch {
+      if (requestId !== draftRequest.current) return;
+      setDraftError('The workflow could not be drafted. Try again.');
+      setStep('describe');
+    }
   };
 
   const handleAcceptSuggestion = (id) => {
@@ -105,7 +98,7 @@ export default function BuildWithAiDrawer({
       });
       if (res?.suggestions) {
         setSuggestions(res.suggestions);
-        if (onPreviewDraft) onPreviewDraft(res.suggestions);
+        setDraftEdges(res.edges ?? []);
       }
       setRefinementText('');
     } catch (err) {
@@ -115,9 +108,11 @@ export default function BuildWithAiDrawer({
 
   const handleCommitNodesToCanvas = () => {
     const acceptedNodes = suggestions.filter(s => s.status === 'accepted');
-    if (onApplyToCanvas) {
-      onApplyToCanvas(acceptedNodes);
-    }
+    const acceptedIds = new Set(acceptedNodes.map(node => node.id));
+    onApplyToCanvas?.({
+      nodes: acceptedNodes,
+      edges: draftEdges.filter(edge => acceptedIds.has(edge.from) && acceptedIds.has(edge.to))
+    });
     onClose();
   };
 
@@ -128,14 +123,14 @@ export default function BuildWithAiDrawer({
   const rejectedCount = suggestions.filter(s => s.status === 'rejected').length;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[500px] lg:w-[540px] bg-white dark:bg-[#18181C] border-l border-[#E3E6EE] dark:border-white/[0.08] shadow-2xl flex flex-col font-sans animate-in slide-in-from-right duration-200">
+    <div data-ai-drawer role="region" aria-labelledby="ai-builder-title" style={{ top }} className="absolute bottom-0 right-0 z-50 w-full sm:w-[500px] lg:w-[540px] bg-white dark:bg-[#18181C] border-l border-[#E3E6EE] dark:border-white/[0.08] shadow-2xl flex flex-col font-sans animate-in slide-in-from-right duration-200">
       {/* Top Header matching N2 - N5 */}
       <div className="p-5 border-b border-[#E3E6EE] dark:border-white/[0.08] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-[#EFF4FF] dark:bg-blue-900/30 border border-[#D0E1FD] dark:border-blue-700/50 flex items-center justify-center text-[#2D55F5]">
             <Sparkles className="w-4 h-4" />
           </div>
-          <h3 className="text-base font-bold text-[#0A0F1F] dark:text-white">
+          <h3 id="ai-builder-title" className="text-base font-bold text-[#0A0F1F] dark:text-white">
             Build with AI
           </h3>
         </div>
@@ -203,7 +198,7 @@ export default function BuildWithAiDrawer({
                   {prompt.length} / 1,000
                 </span>
               </div>
-              <textarea
+              <textarea autoFocus
                 rows={4}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -462,7 +457,17 @@ export default function BuildWithAiDrawer({
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => setEditingSuggestionId(sug.id)}
+                              onClick={() => {
+                                setRuleChecklist((sug.rules ?? []).map(rule => ({
+                                  ...rule,
+                                  checked: rule.selected !== false,
+                                  desc: rule.desc || rule.onFailure,
+                                  badge: rule.source
+                                })));
+                                setSelectedModel(sug.model || 'gpt-5-mini');
+                                setOnFailureAction(sug.onFailure || 'Send to quarantine');
+                                setEditingSuggestionId(sug.id);
+                              }}
                               className="w-7 h-7 rounded-lg border border-[#CDD2DE] bg-white hover:bg-slate-50 flex items-center justify-center text-[#5F6678] cursor-pointer"
                               title="Edit suggestion"
                             >
@@ -606,7 +611,13 @@ export default function BuildWithAiDrawer({
                           <button
                             type="button"
                             onClick={() => {
-                              handleAcceptSuggestion(sug.id);
+                              setSuggestions(previous => previous.map(node => node.id === sug.id ? {
+                                ...node,
+                                status: 'accepted',
+                                model: selectedModel,
+                                onFailure: onFailureAction,
+                                rules: ruleChecklist.map(({ checked, ...rule }) => ({ ...rule, selected: checked }))
+                              } : node));
                               setEditingSuggestionId(null);
                             }}
                             className="px-4 py-1.5 bg-[#2D55F5] hover:bg-blue-600 text-white font-semibold text-xs rounded-xl shadow-2xs cursor-pointer"
@@ -647,6 +658,7 @@ export default function BuildWithAiDrawer({
       </div>
 
       {/* Drawer Footer Actions */}
+      {draftError && <p role="alert" className="px-5 py-2 text-xs text-red-700 dark:text-red-300">{draftError}</p>}
       <div className="p-5 border-t border-[#E3E6EE] dark:border-white/[0.08] bg-white dark:bg-[#18181C] flex items-center justify-between shrink-0">
         {step === 'describe' ? (
           <>
@@ -670,7 +682,7 @@ export default function BuildWithAiDrawer({
           <>
             <button
               type="button"
-              onClick={() => setStep('describe')}
+              onClick={() => { draftRequest.current += 1; setStep('describe'); }}
               className="px-4 py-2 rounded-xl border border-[#CDD2DE] text-xs font-semibold text-[#0A0F1F] dark:text-white hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
             >
               <Pause className="w-3.5 h-3.5" />

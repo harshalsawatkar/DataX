@@ -90,42 +90,10 @@ export default function SourceModalPanel({
 
   return (
     <div className="space-y-5">
-      {/* Connection Method Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          type="button"
-          onClick={() => setConnectMethod('host')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            connectMethod === 'host'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Host & Credentials
-        </button>
-        <button
-          type="button"
-          onClick={() => setConnectMethod('string')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            connectMethod === 'string'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Connection URI String
-        </button>
-        <button
-          type="button"
-          onClick={() => setConnectMethod('upload')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-            connectMethod === 'upload'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          <Upload className="w-3.5 h-3.5" />
-          <span>Upload Dataset (CSV/Excel/JSON)</span>
-        </button>
+      <div className="grid grid-cols-3 rounded-full bg-slate-100 p-1 text-xs font-medium">
+        {[['host', 'Host & credentials'], ['string', 'Connection URI'], ['upload', 'Upload file']].map(([value, label]) =>
+          <button key={value} type="button" aria-pressed={connectMethod === value} onClick={() => setConnectMethod(value)}
+            className={`rounded-full px-1 py-1.5 ${connectMethod === value ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'}`}>{label}</button>)}
       </div>
 
       {connectMethod === 'upload' ? (
@@ -622,7 +590,7 @@ export default function SourceModalPanel({
 
           {/* Read Scope Options */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700">Read Scope Mode</label>
+            <label className="block text-xs font-bold text-slate-700">Read scope</label>
             <div className="grid grid-cols-2 gap-3">
               <div
                 onClick={() => setReadScope('selected')}

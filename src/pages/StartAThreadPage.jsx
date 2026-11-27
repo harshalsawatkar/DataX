@@ -4,7 +4,7 @@ import { useNavigation } from '../context/NavigationContext';
 import { useRuleEngine } from '../context/RuleEngineContext';
 import { 
   ArrowLeft, 
-  GitBranch, 
+ 
   Info, 
   FileText, 
   Database, 
@@ -15,7 +15,9 @@ import {
 
 export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
   const { navigateTo } = useNavigation();
-  const { selectThread, setActiveThread } = useRuleEngine();
+  const fromCanvas = new URLSearchParams(window.location.hash.split('?')[1]).get('from') === 'canvas';
+  const returnScreen = fromCanvas ? 'canvas' : 'workflows';
+  const { selectThread, setActiveThread, setActiveWorkflowMeta, setWorkflowNodes, setWorkflowEdges, setActiveRules, setSourceConfig, setTargetConfig } = useRuleEngine();
   
   const [threadName, setThreadName] = useState('SAP BW → S/4HANA Clean Core');
   const [description, setDescription] = useState('Extract InfoCube purchasing lines, fix legacy plant codes and stage clean orders.');
@@ -34,7 +36,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
       id: 'sap',
       title: 'SAP BW → S/4HANA Clean Core',
       desc: 'InfoCube → S/4HANA BAPI · 5 rules',
-      badge: null,
+      badge: 'Tier 1',
       icon: (
         <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
           <ellipse cx="14" cy="7" rx="10" ry="3.5" fill="#D4FF3A" stroke="#0A0F1F" strokeWidth="1.75" />
@@ -50,7 +52,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
       id: 'ledger',
       title: 'Financial GL & SOX 404 Audit',
       desc: 'Debits = Credits → BigQuery · 4 rules',
-      badge: 'Tier 2',
+      badge: 'Tier 1',
       badgeClass: 'bg-[#EEF2FF] text-[#2D55F5] border-[#DCE4FF]',
       icon: <Layers className="w-5 h-5 text-[#2D55F5]" />
     },
@@ -58,7 +60,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
       id: 'customer',
       title: 'Customer Master 360 & Vector',
       desc: 'MongoDB → Vector matcher → Neon · 4 rules',
-      badge: 'Tier 1',
+      badge: 'Tier 2',
       badgeClass: 'bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]',
       icon: (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -72,7 +74,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
       id: 'rag',
       title: 'Policy RAG & Legal Contracts',
       desc: 'AWS S3 → RAG enricher → Pinecone · 4 rules',
-      badge: 'Tier 3',
+      badge: 'Tier 2',
       badgeClass: 'bg-[#F5F3FF] text-[#7C3AED] border-[#DDD6FE]',
       icon: <FlaskConical className="w-5 h-5 text-[#7C3AED]" />
     },
@@ -80,7 +82,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
       id: 'sfdc',
       title: 'Salesforce CRM → BigQuery',
       desc: 'Salesforce leads → BigQuery API · 4 rules',
-      badge: 'Tier 2',
+      badge: 'Tier 1',
       badgeClass: 'bg-[#EEF2FF] text-[#2D55F5] border-[#DCE4FF]',
       icon: <Cloud className="w-5 h-5 text-[#2D55F5]" />
     }
@@ -116,18 +118,25 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
     else if (selectedPack === 'ledger') packKey = 'financial_gl_ledger';
     else if (selectedPack === 'rag') packKey = 'enterprise_rag_knowledge';
     else if (selectedPack === 'sfdc') packKey = 'salesforce_crm_bigquery';
-    else if (selectedPack === 'scratch') packKey = 'sap_bw_s4hana';
-
-    if (selectThread) {
+    const scratch = selectedPack === 'scratch';
+    const draft = {
+      id: crypto.randomUUID(), name: threadName.trim(), description: description.trim(),
+      desc: description.trim(), status: 'draft', statusLabel: 'Draft',
+      packKey: scratch ? 'scratch' : packKey, domainPackId: 'custom',
+    };
+    if (!draft.name) return;
+    if (scratch) {
+      setWorkflowNodes([]);
+      setWorkflowEdges([]);
+      setActiveRules([]);
+      setSourceConfig({});
+      setTargetConfig({});
+      setActiveThread(draft);
+    } else {
       selectThread(packKey);
+      setActiveThread(template => ({ ...template, ...draft }));
     }
-    if (setActiveThread) {
-      setActiveThread(prev => ({
-        ...prev,
-        name: threadName,
-        desc: description
-      }));
-    }
+    setActiveWorkflowMeta(draft);
 
     // Direct transition to interactive Visual Canvas
     navigateTo('canvas');
@@ -140,9 +149,9 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
         <div className="max-w-[1440px] w-full mx-auto flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigateTo('workflows')}
+            onClick={() => navigateTo(returnScreen)}
             className="w-8 h-8 rounded-full flex items-center justify-center text-[#474E61] dark:text-slate-300 hover:bg-[#F5F6FA] dark:hover:bg-white/[0.08] transition-colors cursor-pointer border border-[#E3E6EE] dark:border-white/[0.08]"
-            title="Back to workflows"
+            title={fromCanvas ? 'Back to Visual Canvas' : 'Back to workflows'}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -161,16 +170,13 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
       </div>
 
       {/* Main Centered Form Card (Matches SS 2 Frame 01.2 exact layout) */}
-      <main className="flex-1 max-w-[700px] w-full mx-auto px-4 sm:px-6 py-8">
+      <main className="flex-1 max-w-[768px] w-full mx-auto px-4 sm:px-6 py-8">
         <form 
           onSubmit={handleCreateWorkflow} 
-          className="bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-[24px] p-7 sm:p-9 shadow-sm space-y-6"
+          className="bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-[24px] p-6 sm:p-7 shadow-sm space-y-6"
         >
           {/* Header Inside Card */}
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-[#EEF2FF] dark:bg-blue-950/40 border border-[#DCE4FF] dark:border-blue-800/40 flex items-center justify-center text-[#2D55F5] shrink-0">
-              <GitBranch className="w-5 h-5 stroke-[2.2]" />
-            </div>
             <div>
               <span className="text-xs text-[#5F6678] dark:text-slate-400 font-medium">New workflow</span>
               <h1 className="text-2xl font-bold text-[#0A0F1F] dark:text-white tracking-tight leading-tight">
@@ -187,7 +193,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
                 Workflow name
               </label>
               <input
-                type="text"
+                type="text" autoFocus
                 value={threadName}
                 onChange={(e) => setThreadName(e.target.value)}
                 placeholder="Name your workflow..."
@@ -198,7 +204,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
 
             {/* Field 2: Description */}
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 mb-2">
                 <label className="text-xs font-semibold text-[#0A0F1F] dark:text-white">
                   Description
                 </label>
@@ -227,10 +233,10 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
                 {packs.map((pack) => {
                   const isSelected = selectedPack === pack.id;
                   return (
-                    <div
+                    <button type="button" aria-pressed={isSelected}
                       key={pack.id}
                       onClick={() => handleSelectPack(pack)}
-                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-2.5 select-none ${
+                      className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-2.5 select-none ${
                         isSelected
                           ? 'border-[#2D55F5] bg-[#F5F8FF] dark:bg-blue-950/25 shadow-[0_0_0_1px_rgba(45,85,245,0.2)]'
                           : 'border-[#E3E6EE] dark:border-white/[0.08] bg-white dark:bg-[#121215] hover:border-[#CDD2DE] dark:hover:border-white/[0.16] hover:bg-[#F9FAFC] dark:hover:bg-white/[0.02]'
@@ -242,7 +248,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <h4 className="text-xs font-bold text-[#0A0F1F] dark:text-white leading-tight truncate">
+                            <h4 className="text-xs font-bold text-[#0A0F1F] dark:text-white leading-tight">
                               {pack.title}
                             </h4>
                             {pack.badge && (
@@ -251,7 +257,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-[#5F6678] dark:text-slate-400 mt-1 leading-snug line-clamp-2">
+                          <p className="text-[11px] text-[#5F6678] dark:text-slate-400 mt-1 leading-snug ">
                             {pack.desc}
                           </p>
                         </div>
@@ -269,7 +275,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
                           {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                         </div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -291,7 +297,7 @@ export default function StartAThreadPage({ onSwitchToMarketing } = {}) {
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
-                onClick={() => navigateTo('workflows')}
+                onClick={() => navigateTo(returnScreen)}
                 className="px-4 py-2 rounded-full border border-transparent hover:bg-slate-100 dark:hover:bg-white/[0.05] text-xs font-semibold text-[#5F6678] dark:text-slate-300 transition-colors cursor-pointer"
               >
                 Cancel

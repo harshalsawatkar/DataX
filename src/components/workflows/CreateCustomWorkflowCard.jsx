@@ -1,21 +1,19 @@
 import React from 'react';
 import { LayoutGrid } from 'lucide-react';
 
-/**
- * Custom Workflow Vector Icon matching 01.1
- */
 const CustomWorkflowIcon = () => (
-  <div className="w-12 h-12 rounded-2xl bg-[#0B1536] text-white flex items-center justify-center relative shadow-sm">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-      <polyline points="14 2 14 8 20 8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-      <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
-      <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
-    </svg>
-    <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#2D55F5] border-2 border-white dark:border-[#18181C] flex items-center justify-center text-white text-[11px] font-bold">
-      +
-    </div>
-  </div>
+  <svg
+    viewBox="0 0 32 32"
+    className="size-8 shrink-0 sm:size-11"
+    fill="none"
+    aria-hidden="true"
+  >
+    <rect x="4.5" y="9.5" width="18" height="22" rx="4" fill="#D1DBFE" />
+    <rect x="3" y="8.5" width="18.5" height="22" rx="4" fill="#FFFFFF" stroke="#0A0F1F" strokeWidth="1.8" />
+    <path d="M7 15h8m-8 4h8m-8 4h8" stroke="#0A0F1F" strokeWidth="1.7" strokeLinecap="round" />
+    <circle cx="22" cy="10" r="7" fill="#2D55F5" stroke="#0A0F1F" strokeWidth="1.8" />
+    <path d="M22 5.5c.6 2.6 1.9 3.9 4.5 4.5-2.6.6-3.9 1.9-4.5 4.5-.6-2.6-1.9-3.9-4.5-4.5 2.6-.6 3.9-1.9 4.5-4.5Z" style={{ fill: '#D4FF3A' }} />
+  </svg>
 );
 
 /**
@@ -25,13 +23,13 @@ export default function CreateCustomWorkflowCard({ onOpenCanvas, onNewThread }) 
   const handleClick = onOpenCanvas || onNewThread;
 
   return (
-    <div 
+    <div
       onClick={handleClick}
-      className="border-2 border-dashed border-[#CDD2DE] dark:border-white/[0.12] rounded-[22px] p-6 sm:p-7 flex flex-col items-center justify-center text-center bg-[#FBFBFC] dark:bg-white/[0.015] hover:border-[#2D55F5]/50 hover:bg-[#F8FAFF] dark:hover:bg-white/[0.03] transition-all cursor-pointer group min-h-[300px]"
+      className="border-2 border-dashed border-[#CDD2DE] dark:border-white/[0.12] rounded-[22px] p-6 sm:p-7 flex flex-col items-center justify-center text-center bg-[#FBFBFC] dark:bg-white/[0.015] hover:border-[#2D55F5]/50 hover:bg-[#F8FAFF] dark:hover:bg-white/[0.03] transition-all cursor-pointer group min-h-[224px]"
     >
       <CustomWorkflowIcon />
 
-      <h3 className="font-bold text-sm sm:text-base text-[#0A0F1F] dark:text-white mt-4 group-hover:text-[#2D55F5] transition-colors">
+      <h3 className="font-semibold text-xl sm:text-[30px] text-[#0A0F1F] dark:text-white mt-4 group-hover:text-[#2D55F5] transition-colors">
         Create a custom workflow
       </h3>
 

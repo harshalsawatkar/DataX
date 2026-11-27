@@ -31,25 +31,8 @@ export default function TargetModalPanel({
 
   return (
     <div className="space-y-4">
-      {/* Header with Source Detection Context */}
-      <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <span className="text-xs font-bold text-emerald-950 block">Target Commitment Destination</span>
-          <span className="text-[11px] text-emerald-700">
-            Destination system where compliant golden records are committed.
-          </span>
-        </div>
-        {sourceTable && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-md bg-white border border-emerald-200 text-slate-700">
-            <Database className="w-3 h-3 text-emerald-600" />
-            <span className="text-slate-500">Source:</span>
-            <span className="font-mono font-bold text-emerald-900">{sourceTable}</span>
-          </span>
-        )}
-      </div>
-
       <div>
-        <label className="block text-xs font-bold text-slate-800 mb-1">Target System Destination</label>
+        <label className="block text-xs font-bold text-slate-800 mb-1">Target system</label>
         <select
           value={tgtDbType}
           onChange={(e) => setTgtDbType(e.target.value)}
@@ -63,7 +46,7 @@ export default function TargetModalPanel({
       </div>
 
       <div>
-        <label className="block text-xs font-semibold text-slate-700 mb-1">Target Endpoint / Connection URI</label>
+        <label className="block text-xs font-semibold text-slate-700 mb-1">Endpoint / connection URI</label>
         <input
           type="text"
           value={tgtEndpoint}
@@ -171,40 +154,12 @@ export default function TargetModalPanel({
       {/* Write Mode Tabs */}
       <div>
         <label className="block text-xs font-bold text-slate-800 mb-1.5">Writeback Mode</label>
-        <div className="grid grid-cols-3 gap-2">
-          <div
-            onClick={() => setWriteMode('append')}
-            className={`p-2.5 rounded-xl border cursor-pointer text-center transition-all ${
-              writeMode === 'append'
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold shadow-2xs'
-                : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}
-          >
-            <span className="block text-xs">Append</span>
-            <span className="block text-[10px] text-slate-400 font-normal">Preserve history</span>
-          </div>
-          <div
-            onClick={() => setWriteMode('upsert')}
-            className={`p-2.5 rounded-xl border cursor-pointer text-center transition-all ${
-              writeMode === 'upsert'
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold shadow-2xs'
-                : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}
-          >
-            <span className="block text-xs">Upsert</span>
-            <span className="block text-[10px] text-slate-400 font-normal">Update by PK</span>
-          </div>
-          <div
-            onClick={() => setWriteMode('overwrite')}
-            className={`p-2.5 rounded-xl border cursor-pointer text-center transition-all ${
-              writeMode === 'overwrite'
-                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold shadow-2xs'
-                : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}
-          >
-            <span className="block text-xs">Overwrite</span>
-            <span className="block text-[10px] text-slate-400 font-normal">Truncate & load</span>
-          </div>
+        <div className="grid gap-2">
+          {[['append', 'Append', 'Preserve history'], ['upsert', 'Upsert', 'Update by primary key'], ['overwrite', 'Overwrite', 'Truncate and load']].map(([value, label, hint]) =>
+            <label key={value} className={`rounded-lg border p-3 flex justify-between items-center cursor-pointer ${writeMode === value ? 'border-blue-500 bg-blue-50' : 'border-slate-200'}`}>
+              <span><strong className="block text-xs">{label}</strong><small className="text-slate-500">{hint}</small></span>
+              <input type="radio" name="write-mode" checked={writeMode === value} onChange={() => setWriteMode(value)} />
+            </label>)}
         </div>
       </div>
 

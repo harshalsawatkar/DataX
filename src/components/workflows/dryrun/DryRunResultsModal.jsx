@@ -6,8 +6,6 @@ import {
   X, 
   RotateCcw, 
   Play, 
-  Inbox, 
-  Zap, 
   ArrowRight
 } from 'lucide-react';
 import { useNavigation } from '../../../context/NavigationContext';
@@ -75,7 +73,7 @@ export default function DryRunResultsModal({
 
   const modalNode = (
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-slate-900/60 backdrop-blur-xs font-sans"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 md:p-6 bg-slate-900/45 font-sans"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
@@ -86,21 +84,15 @@ export default function DryRunResultsModal({
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-[24px] max-w-[780px] w-full max-h-[min(90vh,860px)] shadow-2xl relative text-left flex flex-col overflow-hidden"
+        className="bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-[24px] max-w-[820px] w-full max-h-[min(90vh,860px)] shadow-2xl relative text-left flex flex-col overflow-hidden"
       >
         {/* Top Header Row - Fixed/Pinned with Clean Padding */}
         <div className="px-6 sm:px-8 pt-6 pb-4 sm:pt-7 sm:pb-5 border-b border-[#F0F2F6] dark:border-white/[0.06] flex items-start justify-between gap-4 shrink-0 bg-white dark:bg-[#18181C]">
           <div className="flex items-start gap-4 min-w-0">
-            <DryRunOrbGraphic />
+            <span aria-hidden="true" className="mx-2 grid size-16 shrink-0 place-items-center rounded-full border-[10px] border-[#E7F6EE] bg-[#318D69] text-white sm:mx-5 sm:size-24 sm:border-[15px]"><Check className="size-6 sm:size-8" strokeWidth={2.5} /></span>
 
             <div className="min-w-0">
-              {/* Green Passing Status Pill */}
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ECFDF5] dark:bg-emerald-950/40 border border-[#A7F3D0] dark:border-emerald-800/50 text-[#127A52] dark:text-emerald-400 text-xs font-semibold mb-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#127A52] dark:bg-emerald-400" />
-                Dry run passed · nothing written
-              </div>
 
-              {/* Main Modal Title */}
               <h2 className="text-lg sm:text-2xl font-bold text-[#0A0F1F] dark:text-white tracking-tight leading-snug">
                 Your rules are ready to run live
               </h2>
@@ -111,7 +103,7 @@ export default function DryRunResultsModal({
               </p>
 
               {/* Timing Metadata */}
-              <div className="text-[11px] font-mono text-[#8E95A9] dark:text-slate-500 mt-1">
+              <div className="text-[11px] text-[#8E95A9] dark:text-slate-500 mt-1">
                 {elapsedTime} elapsed · Run at {runTime}
               </div>
             </div>
@@ -132,7 +124,7 @@ export default function DryRunResultsModal({
           {/* 5-Column Metric Cards Row */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
             {/* 1. Rows checked */}
-            <div className="bg-[#F8FAFC] dark:bg-white/[0.02] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5">
+            <div className="bg-white dark:bg-white/[0.02] shadow-sm border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5">
               <div className="text-[11px] font-medium text-[#5F6678] dark:text-slate-400">Rows checked</div>
               <div className="text-xl sm:text-2xl font-bold text-[#0A0F1F] dark:text-white mt-1">
                 {totalRows.toLocaleString()}
@@ -140,39 +132,39 @@ export default function DryRunResultsModal({
             </div>
 
             {/* 2. Clean */}
-            <div className="bg-[#F8FAFC] dark:bg-white/[0.02] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5">
+            <div className="bg-white dark:bg-white/[0.02] shadow-sm border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5">
               <div className="text-[11px] font-medium text-[#5F6678] dark:text-slate-400">Clean</div>
-              <div className="text-xl sm:text-2xl font-bold text-[#127A52] mt-1">
+              <div className="text-xl sm:text-2xl font-bold text-[#127A52] dark:text-emerald-400 mt-1">
                 {cleanCount.toLocaleString()}
               </div>
             </div>
 
             {/* 3. Auto-fixed */}
-            <div className="bg-[#F8FAFC] dark:bg-white/[0.02] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5">
+            <div className="bg-white dark:bg-white/[0.02] shadow-sm border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5">
               <div className="text-[11px] font-medium text-[#5F6678] dark:text-slate-400">Auto-fixed</div>
-              <div className="text-xl sm:text-2xl font-bold text-[#2D55F5] mt-1">
+              <div className="text-xl sm:text-2xl font-bold text-[#2D55F5] dark:text-blue-300 mt-1">
                 {autoFixedCount.toLocaleString()}
               </div>
             </div>
 
             {/* 4. Quarantined */}
-            <div className="bg-[#F8FAFC] dark:bg-white/[0.02] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5">
+            <div className="bg-white dark:bg-white/[0.02] shadow-sm border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5">
               <div className="text-[11px] font-medium text-[#5F6678] dark:text-slate-400">Quarantined</div>
-              <div className="text-xl sm:text-2xl font-bold text-[#C06815] mt-1">
+              <div className="text-xl sm:text-2xl font-bold text-[#A65300] dark:text-amber-300 mt-1">
                 {quarantinedCount.toLocaleString()}
               </div>
             </div>
 
-            {/* 5. Compliance Rate (Dark Badge with Lime Bar) */}
-            <div className="col-span-2 sm:col-span-1 bg-[#0A0F1F] text-white rounded-2xl p-3.5 flex flex-col justify-between shadow-xs">
-              <div className="text-[11px] font-medium text-[#8E95A9]">Compliance rate</div>
+            {/* Compliance rate */}
+            <div className="col-span-2 sm:col-span-1 bg-white dark:bg-white/[0.02] shadow-sm border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl p-3.5 flex flex-col justify-between">
+              <div className="text-[11px] font-medium text-[#5F6678] dark:text-slate-400">Compliance rate</div>
               <div>
-                <div className="text-xl font-bold text-white tracking-tight">
+                <div className="text-xl sm:text-2xl font-bold text-[#127A52] dark:text-emerald-400 mt-1 leading-none">
                   {complianceRate}
                 </div>
-                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1.5">
+                <div className="w-full h-1.5 bg-[#E8E9EB] dark:bg-slate-700 rounded-full overflow-hidden mt-1.5">
                   <div 
-                    className="h-full bg-[#D4FF3A] rounded-full"
+                    className="h-full bg-[#2F8A68] dark:bg-emerald-400 rounded-full"
                     style={{ width: complianceRate }}
                   />
                 </div>
@@ -186,14 +178,14 @@ export default function DryRunResultsModal({
               <h4 className="text-xs sm:text-sm font-bold text-[#0A0F1F] dark:text-white">
                 Rule outcomes
               </h4>
-              <span className="text-[11px] font-mono text-[#5F6678] dark:text-slate-400">
+              <span className="text-[11px] text-[#5F6678] dark:text-slate-400">
                 Engine: DuckDB in-process
               </span>
             </div>
 
             <div className="border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl overflow-hidden divide-y divide-[#E3E6EE] dark:divide-white/[0.08]">
               {/* Table Header */}
-              <div className="grid grid-cols-12 bg-[#F8FAFC] dark:bg-white/[0.03] px-4 py-2 text-[10px] font-bold text-[#5F6678] dark:text-slate-400 tracking-wider">
+              <div className="grid grid-cols-12 bg-[#EDF2FF] dark:bg-[#252D46] px-4 py-2 text-[10px] font-bold text-[#5F6678] dark:text-slate-400 tracking-wider">
                 <div className="col-span-6">RULE</div>
                 <div className="col-span-3 text-right">ROWS AFFECTED</div>
                 <div className="col-span-3 text-right">ACTION TAKEN</div>
@@ -209,18 +201,16 @@ export default function DryRunResultsModal({
                     <div className="col-span-6 font-medium text-[#0A0F1F] dark:text-white truncate">
                       {r.name}
                     </div>
-                    <div className="col-span-3 text-right font-mono font-semibold text-[#5F6678] dark:text-slate-300">
+                    <div className="col-span-3 text-right font-medium text-[#5F6678] dark:text-slate-300">
                       {r.rowsAffected}
                     </div>
                     <div className="col-span-3 text-right">
                       {r.type === 'quarantine' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#FFF9F2] dark:bg-amber-950/40 border border-[#FDE5CC] dark:border-amber-900/50 text-[#C06815] text-[11px] font-bold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#C06815]" />
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#FFF4E3] dark:bg-amber-950/40 border border-[#F9D7A8] dark:border-amber-900/50 text-[#A65300] dark:text-amber-300 text-[11px] font-bold">
                           Quarantined
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#F5F8FF] dark:bg-blue-950/40 border border-[#DCE4FF] dark:border-blue-900/50 text-[#2D55F5] text-[11px] font-bold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#2D55F5]" />
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#ECF0FF] dark:bg-blue-950/40 border border-[#CCD8FF] dark:border-blue-900/50 text-[#2D55F5] dark:text-blue-300 text-[11px] font-bold">
                           Auto-fixed
                         </span>
                       )}
@@ -232,11 +222,8 @@ export default function DryRunResultsModal({
           </div>
 
           {/* Quarantine Isolation Callout Card */}
-          <div className="p-4 rounded-2xl bg-[#FFF9F2] dark:bg-amber-950/20 border border-[#FDE5CC] dark:border-amber-900/40 flex items-center justify-between gap-3">
+          <div className="p-4 rounded-2xl bg-[#FFF4E3] dark:bg-amber-950/20 border border-[#F9D7A8] dark:border-amber-900/40 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-white dark:bg-[#18181C] border border-[#FDE5CC] dark:border-amber-900/50 flex items-center justify-center text-[#C06815] shrink-0 shadow-2xs">
-                <Inbox className="w-4 h-4" />
-              </div>
               <div className="min-w-0">
                 <div className="text-xs sm:text-sm font-bold text-[#0A0F1F] dark:text-white truncate">
                   {quarantinedCount.toLocaleString()} records isolated in quarantine
@@ -250,7 +237,7 @@ export default function DryRunResultsModal({
             <button
               type="button"
               onClick={handleInspectQuarantine}
-              className="text-xs sm:text-sm font-bold text-[#0A0F1F] dark:text-white hover:text-[#C06815] transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+              className="text-xs sm:text-sm font-bold text-[#0A0F1F] dark:text-white border border-[#CDD2DE] dark:border-white/[0.12] bg-white dark:bg-[#18181C] rounded-lg px-3 py-1.5 hover:text-[#A65300] dark:hover:text-amber-300 transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
             >
               <span>Inspect records</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -258,11 +245,8 @@ export default function DryRunResultsModal({
           </div>
 
           {/* Live Auto-Fix Toggle Card */}
-          <div className="p-4 rounded-2xl bg-[#F5F8FF] dark:bg-blue-950/20 border border-[#DCE4FF] dark:border-blue-900/40 flex items-center justify-between gap-3">
+          <div className="p-4 rounded-2xl bg-[#ECF0FF] dark:bg-blue-950/20 border border-[#CCD8FF] dark:border-blue-900/40 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-white dark:bg-[#18181C] border border-[#DCE4FF] dark:border-blue-900/50 flex items-center justify-center text-[#2D55F5] shrink-0 shadow-2xs">
-                <Zap className="w-4 h-4 fill-current text-[#2D55F5]" />
-              </div>
               <div className="min-w-0">
                 <div className="text-xs sm:text-sm font-bold text-[#0A0F1F] dark:text-white truncate">
                   Keep auto-fix on while live
@@ -276,6 +260,9 @@ export default function DryRunResultsModal({
             {/* Interactive Toggle Switch */}
             <button
               type="button"
+              role="switch"
+              aria-label="Keep auto-fix on while live"
+              aria-checked={autoFixLive}
               onClick={() => setAutoFixLive(!autoFixLive)}
               className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer shrink-0 ${
                 autoFixLive ? 'bg-[#2D55F5]' : 'bg-[#CDD2DE] dark:bg-slate-700'
@@ -291,7 +278,7 @@ export default function DryRunResultsModal({
         </div>
 
         {/* Bottom Actions Footer - Sticky at bottom */}
-        <div className="px-6 sm:px-8 py-4 bg-[#F9FAFC] dark:bg-white/[0.02] border-t border-[#E3E6EE] dark:border-white/[0.08] flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="px-6 sm:px-8 py-4 bg-white dark:bg-white/[0.02] border-t border-[#E3E6EE] dark:border-white/[0.08] flex flex-wrap items-center justify-between gap-3 shrink-0">
           <span className="text-xs text-[#8E95A9] dark:text-slate-500 hidden sm:inline">
             Live runs stream new rows and enforce verified rules continuously.
           </span>

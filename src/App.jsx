@@ -90,8 +90,7 @@ export default function App() {
             </React.Suspense>
           ) : (
             <>
-              <Hero 
-                setActiveView={handleViewChange} 
+              <Hero
                 onOpenDemo={() => setDemoModalOpen(true)} 
               />
               <ProductsSection 
@@ -109,10 +108,7 @@ export default function App() {
 
       {/* Universal Footer (Only on website view) */}
       {activeView === 'website' && (
-        <Footer 
-          setActiveView={handleViewChange} 
-          onOpenDemo={() => setDemoModalOpen(true)} 
-        />
+        <Footer setActiveView={handleViewChange} />
       )}
 
       {/* Enterprise Demo Modal */}

@@ -32,24 +32,18 @@ export default function ControlSection({ onOpenDemo }) {
       id="control"
       style={{
         position: 'relative',
-        background: '#FFFFFF',
+        background: 'var(--landing-surface)',
         paddingTop: 128,
         paddingBottom: 128,
         fontFamily: "'Geist', sans-serif",
       }}
     >
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px' }}>
+      <div style={{ maxWidth: 1248, margin: '0 auto', padding: '0 24px' }}>
         {/* ── 2-Column Split: Backdrop + Review Window on Left, Copy on Right ── */}
         <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 480px',
-            gap: 64,
-            alignItems: 'center',
-            marginBottom: 96,
-          }}
+          className="mb-24 grid items-center gap-12 lg:grid-cols-[minmax(0,660px)_minmax(0,1fr)] lg:gap-20"
         >
-          {/* ── Left Column: review_window image rendered directly (no artificial blue backdrop) ── */}
+          {/* ── Left Column: review window over the offset backdrop ── */}
           <div
             style={{
               position: 'relative',
@@ -60,10 +54,12 @@ export default function ControlSection({ onOpenDemo }) {
               boxSizing: 'border-box',
             }}
           >
+            <div aria-hidden="true" className="absolute -bottom-10 -left-5 right-5 top-12 rounded-[32px] bg-gradient-to-b from-[#D7E1FF] to-[#ECF0FF] lg:-left-10" />
             <img
               src={reviewWindowImg}
               alt="Build with AI review window"
               style={{
+                position: 'relative',
                 width: '100%',
                 height: 'auto',
                 display: 'block',

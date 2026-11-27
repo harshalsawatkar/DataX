@@ -359,7 +359,7 @@ export default function MlCertificationPage({ onSwitchToMarketing } = {}) {
   return (
     <DataXAppShell onSwitchToMarketing={onSwitchToMarketing}>
       {viewMode === 'canvas' ? (
-        <div className="h-[calc(100vh-64px)] w-full p-2.5 bg-[#F5F5F7] flex flex-col overflow-hidden">
+        <div className="h-[var(--studio-content-height,calc(100vh-64px))] w-full p-2.5 bg-[#F5F5F7] flex flex-col overflow-hidden">
           <div className="flex-1 w-full h-full min-h-0 relative">
             <MlGateCanvas onSwitchToStudio={() => setViewMode('studio')} />
           </div>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Bell, 
   Check, 
@@ -21,6 +22,31 @@ export default function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all' | 'unread'
   const menuRef = useRef(null);
+  const panelRef = useRef(null);
+  const [panelPosition, setPanelPosition] = useState({});
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const positionPanel = () => {
+      const anchor = menuRef.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const width = Math.min(410, window.innerWidth - 24);
+      const top = Math.min(anchor.bottom + 10, window.innerHeight - 120);
+      setPanelPosition({
+        width,
+        top,
+        left: Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12)),
+        maxHeight: Math.min(540, window.innerHeight - top - 12),
+      });
+    };
+    positionPanel();
+    window.addEventListener('resize', positionPanel);
+    window.addEventListener('scroll', positionPanel, true);
+    return () => {
+      window.removeEventListener('resize', positionPanel);
+      window.removeEventListener('scroll', positionPanel, true);
+    };
+  }, [isOpen]);
 
   const [notifications, setNotifications] = useState(() => {
     try {
@@ -43,14 +69,24 @@ export default function NotificationCenter() {
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+      if (menuRef.current && !menuRef.current.contains(e.target) && !panelRef.current?.contains(e.target)) {
         setIsOpen(false);
       }
     };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+        menuRef.current?.querySelector('button')?.focus();
+      }
+    };
     if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
       document.addEventListener('mousedown', handleClickOutside);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [isOpen]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -122,6 +158,8 @@ export default function NotificationCenter() {
         className="p-1.5 text-[#5F6678] hover:text-[#0A0F1F] dark:hover:text-white hover:bg-[#F5F6FA] dark:hover:bg-white/[0.05] rounded-full transition-colors relative cursor-pointer"
         title="Notifications"
         aria-label="Open notifications"
+        aria-expanded={isOpen}
+        aria-controls="notification-panel"
       >
         <Bell className="w-4 h-4 text-[#8E95A9]" />
         {unreadCount > 0 && (
@@ -132,8 +170,8 @@ export default function NotificationCenter() {
       </button>
 
       {/* Clean White Notification Panel (Figma 00.5) - Dynamically responsive with generous padding */}
-      {isOpen && (
-        <div className="absolute right-[-48px] sm:right-0 mt-2.5 w-[calc(100vw-32px)] sm:w-[410px] max-w-[420px] max-h-[calc(100vh-80px)] sm:max-h-[min(540px,84vh)] bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl shadow-2xl shadow-slate-900/15 z-50 overflow-hidden text-left font-sans animate-in fade-in slide-in-from-top-2 duration-180 flex flex-col">
+      {isOpen && createPortal(
+        <div ref={panelRef} id="notification-panel" role="dialog" aria-label="Notifications" style={panelPosition} className="fixed bg-white dark:bg-[#18181C] border border-[#E3E6EE] dark:border-white/[0.08] rounded-2xl shadow-2xl shadow-slate-900/15 z-[90] overflow-hidden text-left font-sans animate-in fade-in duration-180 flex flex-col">
           
           {/* Header */}
           <div className="px-5 sm:px-6 pt-5 pb-3.5 shrink-0">
@@ -239,7 +277,7 @@ export default function NotificationCenter() {
             </button>
           </div>
 
-        </div>
+        </div>, document.body
       )}
     </div>
   );

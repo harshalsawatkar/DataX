@@ -22,7 +22,7 @@ export default function EdgeInsertMenuPopover({
   edge,
   fromNode,
   toNode,
-  position = { x: 400, y: 300 },
+  position,
   onSelectNodeType,
   onOpenBuildWithAi
 }) {
@@ -32,11 +32,12 @@ export default function EdgeInsertMenuPopover({
 
   useEffect(() => {
     if (isOpen && edge) {
+      setSearchTerm('');
       setLoading(true);
-      fetch(`${API_BASE_URL}/workflow/edge-suggestions?from_node=${encodeURIComponent(edge.from || '')}&to_node=${encodeURIComponent(edge.to || '')}`)
+      fetch(`${API_BASE_URL}/workflow/edge-suggestions?from_node=${encodeURIComponent(fromNode?.type || '')}&to_node=${encodeURIComponent(toNode?.type || '')}`)
         .then(res => res.json())
         .then(data => {
-          setEdgeData(data);
+          setEdgeData({ fits_here: data.fitsHere.map(item => ({ ...item, desc: item.description })), not_available_here: data.notAvailableHere, stream: data.streamInfo });
           setLoading(false);
         })
         .catch(() => {
@@ -108,41 +109,22 @@ export default function EdgeInsertMenuPopover({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]"
+      className="fixed inset-0 z-50"
       onClick={onClose}
     >
       <div 
-        className="w-[360px] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]"
+        className="absolute w-[380px] max-w-[calc(100vw-24px)] bg-white rounded-[18px] shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[min(530px,85vh)]"
         onClick={(e) => e.stopPropagation()}
         style={{
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+          left: Math.max(12, Math.min((position?.x ?? 52) - 40, window.innerWidth - 392)),
+          top: Math.max(12, Math.min(position?.y ?? 12, window.innerHeight - Math.min(542, window.innerHeight * 0.85 + 12)))
         }}
       >
         {/* Header */}
-        <div className="p-3.5 border-b border-slate-100 bg-slate-50/60">
-          <div className="flex items-center justify-between mb-2.5">
-            <h4 className="text-xs font-semibold text-slate-900 tracking-tight flex items-center gap-1.5">
-              <span>Insert node between</span>
-            </h4>
-            <button
-              onClick={onClose}
-              className="p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-200/50 transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+        <div className="p-3.5 pb-1">
+          <div className="flex items-center gap-2 text-xs text-slate-600 mb-3">Insert between
+            {[fromNode, toNode].map((node, index) => <React.Fragment key={index}>{index === 1 && <ArrowRight size={12}/>}<span className="rounded-full border border-slate-300 px-2 py-1">{{ source:'Source', rules:'AI rules', conditional:'Router', router:'Split', hitl:'Review', target:'Target', quarantine:'DLQ' }[node?.type] || node?.title}</span></React.Fragment>)}
           </div>
-
-          {/* Stream Context Pill */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-200/70 rounded-lg text-[11px] text-blue-900 font-medium mb-2.5">
-            <span className="text-blue-500 font-mono text-xs">⊞</span>
-            <span>On this edge:</span>
-            <span className="font-semibold text-blue-700">raw stream</span>
-            <span className="text-blue-400">·</span>
-            <span className="font-mono text-[10px] text-blue-800 bg-blue-100/70 px-1.5 py-0.2 rounded font-semibold">
-              {edgeData?.edge_info?.row_count || '1,420 rows'}
-            </span>
-          </div>
-
           {/* Search Bar */}
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -150,15 +132,16 @@ export default function EdgeInsertMenuPopover({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search nodes..."
+              placeholder="Search nodes"
               className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               autoFocus
             />
           </div>
         </div>
 
+        <p className="px-3.5 py-2 text-xs text-slate-500">{edgeData?.stream || `On this edge: ${edge.label || 'Data stream'}`}</p>
         {/* Node Categories */}
-        <div className="p-3 overflow-y-auto space-y-3 divide-y divide-slate-100 max-h-[380px]">
+        <div className="p-3 overflow-y-auto space-y-3  min-h-0">
           {/* Fits Here */}
           <div className="space-y-1.5">
             <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-1">
@@ -166,7 +149,7 @@ export default function EdgeInsertMenuPopover({
             </div>
             <div className="space-y-1">
               {fitsList.map((node) => {
-                const IconComponent = node.type === 'rules' ? Sparkles : node.type === 'router' ? GitFork : UserCheck;
+                const IconComponent = node.type === 'rules' ? Sparkles : ['router', 'conditional'].includes(node.type) ? GitFork : UserCheck;
                 return (
                   <button
                     key={node.type}
@@ -176,7 +159,7 @@ export default function EdgeInsertMenuPopover({
                         onClose();
                       }
                     }}
-                    className="w-full text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-500 hover:bg-blue-50/30 transition-all flex items-start gap-2.5 group"
+                    className="w-full text-left p-2.5 rounded-lg first:bg-[#edf0ff] hover:bg-blue-50 transition-all flex items-start gap-2.5 group"
                   >
                     <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200/60 flex items-center justify-center flex-shrink-0 text-[#2D55F5] group-hover:bg-[#2D55F5] group-hover:text-white transition-colors">
                       <IconComponent className="w-3.5 h-3.5" />
@@ -192,7 +175,7 @@ export default function EdgeInsertMenuPopover({
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                      <p className="text-[11px] text-slate-500  mt-0.5">
                         {node.desc}
                       </p>
                     </div>
@@ -212,17 +195,17 @@ export default function EdgeInsertMenuPopover({
                 {notAvailableList.map((node) => (
                   <div
                     key={node.type}
-                    className="p-2 rounded-lg border border-slate-150 bg-slate-50/70 opacity-60 flex items-start gap-2 cursor-not-allowed select-none"
+                    className="p-2 rounded-lg  opacity-60 flex items-start gap-2 cursor-not-allowed select-none"
                     title={node.reason}
                   >
                     <div className="w-6 h-6 rounded bg-slate-200 flex items-center justify-center flex-shrink-0 text-slate-500 text-xs">
                       <AlertCircle className="w-3 h-3" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[11px] font-medium text-slate-600 line-through">
+                      <div className="text-[11px] font-medium text-slate-600 ">
                         {node.title}
                       </div>
-                      <div className="text-[10px] text-slate-400 truncate mt-0.2">
+                      <div className="text-[10px] text-slate-400 mt-0.5">
                         {node.reason}
                       </div>
                     </div>
@@ -242,10 +225,10 @@ export default function EdgeInsertMenuPopover({
                 onOpenBuildWithAi(`Insert logic between ${fromNode?.title || 'upstream'} and ${toNode?.title || 'downstream'}`);
               }
             }}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold text-[#2D55F5] hover:bg-blue-50/70 border border-blue-200 transition-colors"
+            className="w-full flex items-center justify-start gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold text-[#2D55F5] hover:bg-blue-50/70 transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Describe what you need instead →</span>
+            <span>Describe what you need instead</span>
           </button>
         </div>
       </div>

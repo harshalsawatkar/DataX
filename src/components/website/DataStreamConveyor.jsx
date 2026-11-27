@@ -1,335 +1,179 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Check } from 'lucide-react';
-/** DataStreamConveyor – Exact Figma Animation Flow */
-const C_RED   = '#ED4F3D';
-const C_BLUE  = '#3361FA';
-const C_CHECK = '#4ADE80';
-const CARD_W  = 44;
-const CARD_H  = 44;
-const CARD_R  = 12;
-const GAP     = 10;
-const PITCH   = CARD_W + GAP; // 54px
-const N       = 30;
-const STRIP_SHIFT = N * PITCH; // 1620px
-const LOOP_DUR    = '70s';
-// Dynamic metrics (Zero hardcoding policy)
-const TOTAL_ROWS = 1420;
-const HELD_ROWS  = 153;
-const CLEAN_ROWS = TOTAL_ROWS - HELD_ROWS;
-function CardBox({ isClean }) {
-  return (
-    <div
-      style={{
-        width: CARD_W, height: CARD_H, borderRadius: CARD_R,
-        flexShrink: 0, marginRight: GAP, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: isClean ? C_BLUE : C_RED,
-        border: '1px solid rgba(255,255,255,0.28)',
-        boxShadow: isClean
-          ? '0 6px 18px -4px rgba(51,97,250,0.55), inset 0 1px 0 rgba(255,255,255,0.35)'
-          : '0 6px 18px -4px rgba(237,79,61,0.55), inset 0 1px 0 rgba(255,255,255,0.35)',
-      }}
-    >
-      {isClean ? (
-        <Check size={18} strokeWidth={2.8} color={C_CHECK} />
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ width: 16, height: 2, background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />
-          <div style={{ width: 12, height: 2, background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />
-        </div>
-      )}
-    </div>
-  );
+import React, { useEffect, useRef } from 'react';
+import './DataStreamConveyor.css';
+
+const PITCH = 51;
+const SPEED = 85;
+const GATE_Y = 126;
+const TRAY_Y = 356;
+
+function rounded(ctx, x, y, w, h, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+  }
 }
-function LoopStrip({ isClean }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        animation: `conveyorRight ${LOOP_DUR} linear infinite`,
-        willChange: 'transform',
-      }}
-    >
-      {Array.from({ length: N * 2 }, (_, i) => (
-        <CardBox key={i} isClean={isClean} />
-      ))}
-    </div>
-  );
+
+function gradient(ctx, x, y, endX, endY, stops) {
+  const fill = ctx.createLinearGradient(x, y, endX, endY);
+  stops.forEach(([position, color]) => fill.addColorStop(position, color));
+  return fill;
 }
+
+function tile(ctx, x, y, rejected, checked, angle, blur) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  if (blur > 0) ctx.filter = `blur(${blur}px)`;
+  const rim = rejected ? '#fe9660' : '#a9c6ff';
+  const face = gradient(ctx, -18, 18, 17, -19, rejected
+    ? [[0, '#ff6427'], [.18, '#a12c14'], [.58, '#6e1c15'], [.85, '#d54b25'], [1, '#ffa66d']]
+    : [[0, '#88a9ef'], [.12, '#45638f'], [.36, '#1d2d4c'], [.62, '#283c5c'], [.86, '#526c9a'], [1, '#c4d9ff']]);
+  ctx.lineWidth = 1;
+  rounded(ctx, -19, -19, 38, 38, 7, face, rim);
+  rounded(ctx, -16, -16, 32, 31, 5, gradient(ctx, -16, -16, 16, 15,
+    [[0, '#ffffff30'], [.48, '#ffffff00'], [.8, '#040c201c'], [1, '#ffffff36']]));
+  if (checked) {
+    ctx.strokeStyle = '#d4ff3a';
+    ctx.lineWidth = 4;
+    ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.shadowColor = '#c4ff35';
+    ctx.shadowBlur = 5;
+    ctx.beginPath();
+    ctx.moveTo(-9, 0);
+    ctx.lineTo(-3, 6);
+    ctx.lineTo(9, -7);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function scanner(ctx) {
+  ctx.save();
+  ctx.shadowColor = '#245aff';
+  ctx.shadowBlur = 23;
+  const glass = gradient(ctx, -11, 0, 11, 0, [[0, '#859cff'], [.17, '#2857ce'], [.48, '#102978'], [.72, '#357bff'], [.89, '#a0f9ff'], [1, '#3271ff']]);
+  rounded(ctx, -11, 20, 22, 215, 10, glass, '#7aafff');
+  rounded(ctx, 1, 22, 6, 209, 3, gradient(ctx, 0, 20, 0, 235,
+    [[0, '#e2ffff'], [.1, '#619bff42'], [.85, '#388aff33'], [1, '#a2fcff']]));
+  ctx.restore();
+}
+
+function tray(ctx) {
+  ctx.save();
+  const reflection = ctx.createRadialGradient(0, TRAY_Y + 25, 2, 0, TRAY_Y + 25, 105);
+  reflection.addColorStop(0, '#da573644');
+  reflection.addColorStop(.4, '#305edb36');
+  reflection.addColorStop(1, '#15307700');
+  ctx.fillStyle = reflection;
+  ctx.fillRect(-110, TRAY_Y - 80, 220, 210);
+  ctx.shadowColor = '#3e6bff';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.moveTo(-111, TRAY_Y - 8);
+  ctx.lineTo(111, TRAY_Y - 8);
+  ctx.lineTo(102, TRAY_Y + 13);
+  ctx.quadraticCurveTo(100, TRAY_Y + 18, 90, TRAY_Y + 18);
+  ctx.lineTo(-90, TRAY_Y + 18);
+  ctx.quadraticCurveTo(-100, TRAY_Y + 18, -102, TRAY_Y + 13);
+  ctx.closePath();
+  ctx.fillStyle = gradient(ctx, -111, 0, 111, 0, [[0, '#96c4ff'], [.11, '#26468b99'], [.5, '#334e7566'], [.88, '#132c6299'], [1, '#95c6ff']]);
+  ctx.fill();
+  ctx.strokeStyle = '#668dff';
+  ctx.stroke();
+  rounded(ctx, -111, TRAY_Y - 17, 222, 13, 6, '#19367288', '#86adff');
+  ctx.restore();
+}
+
+function render(ctx, width, height, time) {
+  const scale = height / 440;
+  const half = width / (2 * scale);
+  ctx.clearRect(0, 0, width, height);
+  ctx.save();
+  ctx.translate(width / 2, 0);
+  ctx.scale(scale, scale);
+  const distance = time * SPEED;
+  const centerIndex = Math.floor(distance / PITCH);
+  const count = Math.ceil(half / PITCH) + 2;
+  for (let i = centerIndex - count; i <= centerIndex + count; i++) {
+    const x = distance - i * PITCH;
+    const rejected = i % 6 === 0;
+    const blur = Math.max(0, (Math.abs(x) / half - .72) * 15);
+    if (x <= 0 || !rejected) {
+      tile(ctx, x, GATE_Y, rejected, x > 0, x < 0 ? -.035 * Math.sin(i * 2) : 0, blur);
+    } else {
+      const t = x / SPEED / 4.2;
+      if (t <= 1) {
+        const fallX = -40 * Math.sin(Math.PI * t);
+        const fallY = GATE_Y + (TRAY_Y - 24 - GATE_Y) * t * t;
+        ctx.save();
+        ctx.globalAlpha = .14;
+        tile(ctx, fallX - 2, fallY - 16 * t, true, false, -.6 * t, 3);
+        ctx.restore();
+        tile(ctx, fallX, fallY, true, false, -.8 * t, 0);
+      }
+    }
+  }
+  scanner(ctx);
+  tray(ctx);
+  ctx.restore();
+}
+
 export default function DataStreamConveyor() {
-  const [drops, setDrops] = useState([]);
-  const [trayRedGlow, setTrayRedGlow] = useState(false);
-  const abortRef = useRef(null);
-  const metrics = useMemo(() => ({
-    totalIn: TOTAL_ROWS.toLocaleString(),
-    held:    HELD_ROWS.toLocaleString(),
-    clean:   CLEAN_ROWS.toLocaleString(),
-  }), []);
-  // Periodic falling red card animation loop
+  const canvas = useRef(null);
   useEffect(() => {
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    const intervalId = setInterval(() => {
-      if (ctrl.signal.aborted) return;
-      const id = Date.now();
-      setDrops(prev => [...prev.slice(-1), id]);
-      // When the card reaches the tray (approx 550ms), flare red glow
-      const glowTimer = setTimeout(() => {
-        if (!ctrl.signal.aborted) {
-          setTrayRedGlow(true);
-          const resetTimer = setTimeout(() => {
-            if (!ctrl.signal.aborted) setTrayRedGlow(false);
-          }, 700);
-          ctrl.signal.addEventListener('abort', () => clearTimeout(resetTimer));
-        }
-      }, 550);
-      ctrl.signal.addEventListener('abort', () => clearTimeout(glowTimer));
-    }, 2800);
+    const element = canvas.current;
+    const ctx = element.getContext('2d');
+    if (!ctx) return;
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let frame;
+    let visible = true;
+    let time = 4.05;
+    let previous;
+    function draw(now) {
+      const { clientWidth: width, clientHeight: height } = element;
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      if (element.width !== Math.round(width * ratio) || element.height !== Math.round(height * ratio)) {
+        element.width = Math.round(width * ratio);
+        element.height = Math.round(height * ratio);
+      }
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      if (previous !== undefined && !motion.matches) time += Math.min(now - previous, 100) / 1000;
+      previous = now;
+      if (width && height) render(ctx, width, height, motion.matches ? 4.05 : time);
+      if (visible && !motion.matches) frame = requestAnimationFrame(draw);
+    }
+    function restart() {
+      cancelAnimationFrame(frame);
+      previous = undefined;
+      if (visible) draw(performance.now());
+    }
+    const resize = new ResizeObserver(restart);
+    const observer = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      restart();
+    });
+    resize.observe(element);
+    observer.observe(element);
+    motion.addEventListener('change', restart);
     return () => {
-      ctrl.abort();
-      clearInterval(intervalId);
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+      observer.disconnect();
+      motion.removeEventListener('change', restart);
     };
   }, []);
-  const handleDropComplete = (id) => {
-    setDrops(prev => prev.filter(cardId => cardId !== id));
-  };
   return (
-    <div
-      style={{
-        position: 'relative',
-        width: '100%',
-        maxWidth: 1200,
-        margin: '52px auto 0',
-        fontFamily: "'Geist', sans-serif",
-        userSelect: 'none',
-        boxSizing: 'border-box',
-      }}
-    >
-      <style>{`
-        @keyframes conveyorRight {
-          from { transform: translateX(-${STRIP_SHIFT}px); }
-          to   { transform: translateX(0px); }
-        }
-      `}</style>
-      {/* ── Main Stage ────────────────────────────────────────── */}
-      <div style={{ position: 'relative', height: 230, overflow: 'hidden', borderRadius: 16 }}>
-
-        {/* Center blue radial ambient glow behind scanner */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '38%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 200,
-            height: 280,
-            borderRadius: '50%',
-            background: 'rgba(51, 97, 250, 0.28)',
-            filter: 'blur(65px)',
-            pointerEvents: 'none',
-            zIndex: 5,
-          }}
-        />
-
-        {/* ── 1. Horizontal Belt (Red Left / Blue Right) ─────────── */}
-        <div style={{ position: 'absolute', top: 50, left: 0, right: 0, height: CARD_H }}>
-          {/* RED strip — left half moving into gate */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              pointerEvents: 'none',
-              clipPath: 'inset(0 50% 0 0)',
-              WebkitClipPath: 'inset(0 50% 0 0)',
-              maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 100%)',
-              WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 100%)',
-              zIndex: 10,
-            }}
-          >
-            <LoopStrip isClean={false} />
-          </div>
-
-          {/* BLUE strip — right half streaming out of gate */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              pointerEvents: 'none',
-              clipPath: 'inset(0 0 0 50%)',
-              WebkitClipPath: 'inset(0 0 0 50%)',
-              maskImage: 'linear-gradient(to left, transparent 0%, black 8%, black 100%)',
-              WebkitMaskImage: 'linear-gradient(to left, transparent 0%, black 8%, black 100%)',
-              zIndex: 10,
-            }}
-          >
-            <LoopStrip isClean={true} />
-          </div>
-        </div>
-
-        {/* ── 2. Falling Red Card (Drops down, rotates slightly, dissolves on landing) ─ */}
-        <AnimatePresence>
-          {drops.map((id) => (
-            <motion.div
-              key={id}
-              initial={{ y: 50, x: '-50%', rotate: 0, opacity: 1, scale: 1 }}
-              animate={{
-                y: 142,
-                x: 'calc(-50% - 8px)',
-                rotate: -14,
-                opacity: [1, 1, 0.7, 0],
-                scale: [1, 1, 0.94, 0.88],
-              }}
-              exit={{ opacity: 0 }}
-              transition={{
-                duration: 0.85,
-                times: [0, 0.45, 0.75, 1],
-                ease: [0.32, 0, 0.67, 0],
-              }}
-              onAnimationComplete={() => handleDropComplete(id)}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: 0,
-                width: CARD_W,
-                height: CARD_H,
-                borderRadius: CARD_R,
-                background: C_RED,
-                border: '1px solid rgba(255,255,255,0.28)',
-                boxShadow: '0 6px 18px -4px rgba(237,79,61,0.7), inset 0 1px 0 rgba(255,255,255,0.35)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'none',
-                zIndex: 25,
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ width: 16, height: 2, background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />
-                <div style={{ width: 12, height: 2, background: 'rgba(255,255,255,0.85)', borderRadius: 2 }} />
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {/* ── 3. Vertical Laser Scanner Bar (Suspended with clear gap above tray) ── */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 16,
-            height: 112,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 9,
-            borderRadius: 5,
-            border: '1px solid rgba(255, 255, 255, 0.65)',
-            background: 'linear-gradient(180deg, rgba(140, 173, 255, 0.95) 0%, #4D7AFF 50%, rgba(140, 173, 255, 0.95) 100%)',
-            boxShadow: '0 0 22px 0 rgba(51, 97, 250, 0.85)',
-            pointerEvents: 'none',
-            zIndex: 18,
-          }}
-        />
-
-{/* ── 4. Horizontal Tray Glow ── */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 35,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 240,
-            height: 50,
-            borderRadius: '50%',
-            background: trayRedGlow ? 'rgba(237, 79, 61, 0.42)' : 'rgba(51, 97, 250, 0.15)',
-            filter: 'blur(26px)',
-            opacity: trayRedGlow ? 1 : 0.4,
-            transition: 'background 250ms ease, opacity 250ms ease',
-            pointerEvents: 'none',
-            zIndex: 14,
-          }}
-        />
-
-{/* ── 5. Horizontal Tray Bar ── */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 50,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 170,
-            height: 14,
-            borderRadius: 7,
-            border: trayRedGlow
-              ? '1.5px solid rgba(237, 79, 61, 0.85)'
-              : '1.5px solid rgba(115, 153, 255, 0.70)',
-            background: trayRedGlow
-              ? 'linear-gradient(90deg, rgba(90, 25, 25, 0.60) 0%, rgba(50, 15, 20, 0.85) 100%)'
-              : 'linear-gradient(90deg, rgba(56, 77, 153, 0.50) 0%, rgba(20, 31, 71, 0.80) 100%)',
-            boxShadow: trayRedGlow
-              ? '0 0 24px 0 rgba(237, 79, 61, 0.70)'
-              : '0 0 18px 0 rgba(51, 97, 250, 0.45)',
-            transition: 'border-color 220ms ease, background 220ms ease, box-shadow 220ms ease',
-            pointerEvents: 'none',
-            zIndex: 16,
-          }}
-        />
-      </div>
-
-      {/* ── Metric Badges ──────────────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 72,
-          width: '100%',
-          margin: '16px auto 0',
-          padding: '0 8px',
-        }}
-      >
-        <MetricPill dot="#94a3b8" label={`${metrics.totalIn} rows in`} />
-        <MetricPill dot="#ef4444" glow="#ef4444" label={`${metrics.held} held, each with a reason`} />
-        <MetricPill dot="#D4FF3A" glow="#D4FF3A" label={`${metrics.clean} written clean`} />
-      </div>
-    </div>
-  );
-}
-
-function MetricPill({ dot, glow, label }) {
-  return (
-    <div
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '5px 14px',
-        borderRadius: 999,
-        background: 'rgba(7, 14, 28, 0.80)',
-        border: '1px solid rgba(30, 41, 59, 0.9)',
-        backdropFilter: 'blur(8px)',
-        color: '#cbd5e1',
-        fontSize: 12,
-        fontWeight: 400,
-        whiteSpace: 'nowrap',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: dot,
-          flexShrink: 0,
-          boxShadow: glow ? `0 0 6px ${glow}` : undefined,
-        }}
-      />
-      <span>{label}</span>
-    </div>
+    <figure className="row-conveyor" aria-label="Rows pass through a scanner. Failed rows drop into quarantine.">
+      <canvas ref={canvas} aria-hidden="true" />
+      <figcaption>
+        <span className="rows-in">1,420 rows in</span>
+        <span className="rows-clean">1,267 written clean</span>
+        <span className="rows-held">153 held, each with a reason</span>
+      </figcaption>
+    </figure>
   );
 }

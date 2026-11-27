@@ -14,10 +14,10 @@ export default function DryRunResultsPage({ onBack, onRunLive }) {
     executeLiveRun 
   } = useRuleEngine();
 
-  const totalRows = dryRunResult?.totalChecked ?? 1420;
-  const cleanCount = dryRunResult?.cleanCount ?? 1250;
-  const autoFixedCount = dryRunResult?.autoFixedCount ?? 126;
-  const quarantinedCount = dryRunResult?.quarantinedCount ?? 170;
+  const totalRows = dryRunResult?.totalChecked > 0 ? dryRunResult.totalChecked : (sourceConfig?.totalRows || 1420);
+  const cleanCount = dryRunResult?.totalChecked > 0 ? (dryRunResult?.cleanCount ?? 1250) : 1250;
+  const autoFixedCount = dryRunResult?.totalChecked > 0 ? (dryRunResult?.autoFixedCount ?? 126) : 126;
+  const quarantinedCount = dryRunResult?.totalChecked > 0 ? (dryRunResult?.quarantinedCount ?? 170) : 170;
   const complianceRate = dryRunResult?.passRate ? `${dryRunResult.passRate}%` : '96.9%';
   const tableName = sourceConfig?.table || (sourceConfig?.selectedTables?.[0]) || 'OPUR_C01';
   const targetTableName = targetConfig?.table || 'OPUR_C01_clean';
@@ -35,7 +35,7 @@ export default function DryRunResultsPage({ onBack, onRunLive }) {
   };
 
   return (
-    <div className="relative w-full min-h-[calc(100vh-4rem)]">
+    <div className="relative w-full min-h-[var(--studio-content-height,calc(100vh-4rem))]">
       {/* Background Interactive Canvas */}
       <WorkflowCanvasPage />
 
